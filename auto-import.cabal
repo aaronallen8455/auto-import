@@ -1,0 +1,57 @@
+cabal-version:      3.0
+name:               auto-import
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Aaron Allen
+maintainer:         aaronallen8455@gmail.com
+-- copyright:
+category:           Development
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    exposed-modules:  AutoImport
+                      AutoImport.GhcFacade
+    -- other-modules:
+    default-extensions: LambdaCase, OverloadedStrings
+    build-depends:    base,
+                      ghc,
+                      bytestring,
+                      megaparsec,
+                      text,
+                      containers,
+                      directory
+    hs-source-dirs:   src
+    default-language: GHC2021
+
+executable play
+    import:           warnings
+    default-language: GHC2021
+    -- other-modules:
+    -- other-extensions:
+    hs-source-dirs:   play
+    main-is:          Main.hs
+    build-depends:
+        base,
+        auto-import
+    ghc-options: -fplugin AutoImport
+
+test-suite auto-import-test
+    import:           warnings
+    default-language: GHC2021
+    -- other-modules:
+    -- other-extensions:
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Main.hs
+    build-depends:
+        base,
+        auto-import
