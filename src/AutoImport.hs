@@ -18,8 +18,10 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as T
+import           Data.Time (UTCTime)
 import           Data.Void
 import qualified System.Directory as Dir
+import           System.IO.Unsafe (unsafePerformIO)
 import qualified Text.Megaparsec as Parse
 import qualified Text.Megaparsec.Char as Parse
 
@@ -171,24 +173,67 @@ mkImportStmt (modName, mQual) =
 -- Config
 --------------------------------------------------------------------------------
 
+data ConfigCache = ConfigCache
+  { cachedConfig :: !Config
+  , localModTime :: !(Maybe UTCTime)
+  , homeModTime :: !(Maybe UTCTime)
+  }
+
+-- | A global ref used to cache the config and the mod time of the config file
+configCacheRef :: IORef (Maybe ConfigCache)
+configCacheRef = unsafePerformIO $ newIORef Nothing
+{-# NOINLINE configCacheRef #-}
+
 type Config = M.Map T.Text (T.Text, Maybe T.Text)
+
+localConfigFile, homeConfigFile :: FilePath
+localConfigFile = "./.autoimport"
+homeConfigFile = "~/.autoimport"
 
 resolveConfig :: IO Config
 resolveConfig = do
-  mHomeCfg <- readConfigFile "~/.autoimport.cfg"
-  mLocalCfg <- readConfigFile "./.autoimport.cfg"
-  case mLocalCfg <> mHomeCfg of
-    Nothing -> do
-      BS8.putStrLn "'.autoimport.cfg' file not found by auto-import plugin"
-      pure mempty
-    Just cfg -> pure cfg
+  mCached <- readIORef configCacheRef
+  case mCached of
+    Just configCache -> do
+      mLocalModTime <-
+        Dir.doesFileExist localConfigFile >>= \case
+          True -> Just <$> Dir.getModificationTime localConfigFile
+          False -> pure Nothing
+      mHomeModTime <-
+        Dir.doesFileExist homeConfigFile >>= \case
+          True -> Just <$> Dir.getModificationTime homeConfigFile
+          False -> pure Nothing
+      if mLocalModTime /= localModTime configCache
+         || mHomeModTime /= homeModTime configCache
+      then readAndCacheConfig
+      else pure $ cachedConfig configCache
+    Nothing -> readAndCacheConfig
 
-readConfigFile :: FilePath -> IO (Maybe Config)
+readAndCacheConfig :: IO Config
+readAndCacheConfig = do
+  mHomeCfg <- readConfigFile homeConfigFile
+  mLocalCfg <- readConfigFile localConfigFile
+  case (fst <$> mLocalCfg) <> (fst <$> mHomeCfg) of
+    Nothing -> do
+      BS8.putStrLn "'.autoimport' file not found by auto-import plugin"
+      writeIORef configCacheRef Nothing
+      pure mempty
+    Just cfg -> do
+      let cache = ConfigCache
+            { cachedConfig = cfg
+            , localModTime = snd <$> mLocalCfg
+            , homeModTime = snd <$> mHomeCfg
+            }
+      writeIORef configCacheRef (Just cache)
+      pure cfg
+
+readConfigFile :: FilePath -> IO (Maybe (Config, UTCTime))
 readConfigFile file = do
   exists <- Dir.doesFileExist file
   if exists
   then do
     content <- T.readFile file
+    modTime <- Dir.getModificationTime file
     case parseConfig file content of
       Left err -> do
         let diag = ConfigParseFailDiag err
@@ -197,7 +242,7 @@ readConfigFile file = do
                 Ghc.noSrcSpan
                 (Ghc.ghcUnknownMessage diag)
         throw $ Ghc.SourceError (Ghc.mkMessages $ Ghc.unitBag msgEnv)
-      Right cfg -> pure $ Just cfg
+      Right cfg -> pure $ Just (cfg, modTime)
   else pure Nothing
 
 parseConfig :: String -> T.Text -> Either String Config
