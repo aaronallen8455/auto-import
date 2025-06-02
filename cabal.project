@@ -1,0 +1,3 @@
+packages:
+  auto-import.cabal
+  test-modules/test-modules.cabal

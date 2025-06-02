@@ -1,0 +1,8 @@
+module Case7 where
+
+-- comment
+import           Data.Void
+
+-- | doc
+main :: IO ()
+main = TIO.putStrLn "hi"

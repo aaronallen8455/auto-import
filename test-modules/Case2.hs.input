@@ -1,0 +1,6 @@
+module Case2 where
+
+import           Data.Void
+
+main :: IO ()
+main = TIO.putStrLn "hi"

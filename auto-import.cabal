@@ -29,7 +29,9 @@ library
                       text,
                       containers,
                       directory,
-                      time
+                      time,
+                      ghc-exactprint,
+                      ghc-paths
     hs-source-dirs:   src
     default-language: GHC2021
 
@@ -55,4 +57,8 @@ test-suite auto-import-test
     main-is:          Main.hs
     build-depends:
         base,
-        auto-import
+        auto-import,
+        directory,
+        process,
+        tasty,
+        tasty-hunit

@@ -20,6 +20,8 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as T
 import           Data.Time (UTCTime)
 import           Data.Void
+import qualified GHC.Paths as Paths
+import qualified Language.Haskell.GHC.ExactPrint as EP
 import qualified System.Directory as Dir
 import           System.IO.Unsafe (unsafePerformIO)
 import qualified Text.Megaparsec as Parse
@@ -46,34 +48,19 @@ addHscHook hscEnv = hscEnv
   }
   where
     phaseHook mExistingHook = Ghc.PhaseHook $ \phase -> case phase of
-      Ghc.T_Hsc env modSum -> do
+      Ghc.T_Hsc _ modSum -> do
         let modFile = Ghc.ms_hspp_file modSum
             importsAddedErr =
               Ghc.mkPlainErrorMsgEnvelope
                 (Ghc.mkGeneralSrcSpan $ Ghc.mkFastString modFile)
                 (Ghc.ghcUnknownMessage ImportsAddedDiag)
-        insertLineRef <- newIORef Nothing :: IO (IORef (Maybe InsertLine))
-        let parsePlugin =
-              Ghc.defaultPlugin
-              { Ghc.parsedResultAction = \_ _modSum parsedResult -> do
-                  let !mInsertLine = getLineToInsertAt . Ghc.unLoc . Ghc.hpm_module $ Ghc.parsedResultModule parsedResult
-                  Ghc.liftIO $ writeIORef insertLineRef mInsertLine
-                  pure parsedResult
-              }
-            staticPlugin = Ghc.StaticPlugin
-              { Ghc.spPlugin = Ghc.PluginWithArgs parsePlugin []
-#if MIN_VERSION_ghc(9,12,0)
-              , Ghc.spInitialised = True
-#endif
-              }
-            envWithPlugin = env
-              { Ghc.hsc_plugins = let ps = Ghc.hsc_plugins env in ps
-                { Ghc.staticPlugins = staticPlugin : Ghc.staticPlugins ps }
-              }
-        eTcRes <- try . runPhaseOrExistingHook $ Ghc.T_Hsc envWithPlugin modSum
-        readIORef insertLineRef >>= \case
-          Nothing -> either throw pure eTcRes
-          Just lineToInsertAt -> do
+        -- Parse from file because the parse result from GHC lacks comments
+        eParseResult <- EP.parseModule Paths.libdir modFile
+        eTcRes <- try $ runPhaseOrExistingHook phase
+        case eParseResult of
+          Left errs -> throw $ Ghc.mkSrcErr errs
+          Right parseResult -> do
+            let mLineToInsertAt = getLineToInsertAt $ Ghc.unLoc parseResult
             autoImportCfg <- resolveConfig
             let msgs = case eTcRes of
                          Left (Ghc.SourceError m) -> m
@@ -92,10 +79,10 @@ addHscHook hscEnv = hscEnv
                 (otherDiags, missingMods) =
                   Ghc.partitionBagWith mkMissingModError (Ghc.getMessages msgs)
             case NE.nonEmpty (toList missingMods) of
-              Nothing -> either throw pure eTcRes
-              Just neMissing -> do
+              Just neMissing | Just lineToInsertAt <- mLineToInsertAt -> do
                 modifySource lineToInsertAt modFile neMissing
-                throw (Ghc.SourceError . Ghc.mkMessages $ Ghc.consBag importsAddedErr otherDiags)
+                throw (Ghc.mkSrcErr . Ghc.mkMessages $ Ghc.consBag importsAddedErr otherDiags)
+              _ -> either throw pure eTcRes
       _ -> runPhaseOrExistingHook phase
       where
       runPhaseOrExistingHook :: Ghc.TPhase res -> IO res
@@ -159,10 +146,10 @@ getLineToInsertAt hsMod = mImportLn <|> mDeclLn
       InsertLine True <$> determineStartLine (Ghc.ann' epAnn)
     determineStartLine epAnn = pred <$>
       case Ghc.comments epAnn of
-        Ghc.EpaComments (Ghc.L _ com : _) ->
-          Just . Ghc.srcSpanStartLine $ Ghc.ac_prior_tok com
-        Ghc.EpaCommentsBalanced (Ghc.L _ com : _) _ ->
-          Just . Ghc.srcSpanStartLine $ Ghc.ac_prior_tok com
+        Ghc.EpaComments (Ghc.L comLoc _ : _) ->
+          Just . Ghc.srcSpanStartLine $ Ghc.anchor comLoc
+        Ghc.EpaCommentsBalanced (Ghc.L comLoc _ : _) _ ->
+          Just . Ghc.srcSpanStartLine $ Ghc.anchor comLoc
         _ -> Ghc.srcSpanStartLine <$> Ghc.epAnnSrcSpan epAnn
 
 mkImportStmt :: (T.Text, Maybe T.Text) -> T.Text
@@ -241,7 +228,7 @@ readConfigFile file = do
               Ghc.mkPlainErrorMsgEnvelope
                 Ghc.noSrcSpan
                 (Ghc.ghcUnknownMessage diag)
-        throw $ Ghc.SourceError (Ghc.mkMessages $ Ghc.unitBag msgEnv)
+        throw $ Ghc.mkSrcErr (Ghc.mkMessages $ Ghc.unitBag msgEnv)
       Right cfg -> pure $ Just (cfg, modTime)
   else pure Nothing
 
@@ -251,15 +238,15 @@ parseConfig fileName content =
   where
     parser = M.fromList
            . map (\(name, mQual) -> (fromMaybe name mQual, (name, mQual)))
-           <$> (Parse.many parseLine <* Parse.eof)
+           <$> (Parse.many parseLine <* Parse.space <* Parse.eof)
 
 parseLine :: Parse.Parsec Void T.Text (T.Text, Maybe T.Text)
 parseLine = do
   modName <- parseModName
-  mQual <- Parse.optional $ do
-    Parse.space1 *> Parse.string "as" *> Parse.space1
+  mQual <- Parse.optional . Parse.try $ do
+    Parse.hspace1 *> Parse.string "as" *> Parse.hspace1
     parseModName
-  _ <- Parse.optional Parse.eol
+  _ <- Parse.hspace <* Parse.optional Parse.eol
   pure (modName, mQual)
 
 parseModName :: Parse.Parsec Void T.Text T.Text
@@ -267,5 +254,6 @@ parseModName = T.intercalate "." <$> Parse.sepBy1 parseSegment (Parse.char '.')
   where
     parseSegment = do
       h <- Parse.satisfy Char.isUpper Parse.<?> "uppercase char"
-      rest <- Parse.many (Parse.satisfy Char.isAlphaNum)
+      rest <- Parse.many (Parse.satisfy (\c -> Char.isAlphaNum c || c == '_'))
+        Parse.<?> "module name chars"
       pure . T.pack $ h : rest

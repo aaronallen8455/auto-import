@@ -1,0 +1,4 @@
+module Case3 where
+
+main :: IO ()
+main = putStrLn $ Data.List.sort "hi"

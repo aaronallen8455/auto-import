@@ -1,0 +1,7 @@
+module Case6 where
+
+class C a where
+  c :: a
+
+main :: IO ()
+main = TIO.putStrLn "hi"

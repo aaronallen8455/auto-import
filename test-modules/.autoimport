@@ -1,2 +1,2 @@
 Data.Text.IO as TIO
-Data.List as L
+Data.List

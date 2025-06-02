@@ -1,0 +1,9 @@
+module Case7 where
+
+-- comment
+import qualified Data.Text.IO as TIO
+import           Data.Void
+
+-- | doc
+main :: IO ()
+main = TIO.putStrLn "hi"

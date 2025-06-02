@@ -1,0 +1,6 @@
+module Case3 where
+
+import qualified Data.List
+
+main :: IO ()
+main = putStrLn $ Data.List.sort "hi"

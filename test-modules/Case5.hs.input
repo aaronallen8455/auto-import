@@ -1,0 +1,5 @@
+module Case5 where
+
+-- | doc
+main :: IO ()
+main = TIO.putStrLn "hi"
