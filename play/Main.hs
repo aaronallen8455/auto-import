@@ -1,16 +1,6 @@
-{-# OPTIONS_GHC -fplugin AutoImport #-}
+module Main where
 
--- Hi
-import qualified Data.List as L
-import           Data.List
-
--- | test
+-- test
 main :: IO ()
--- | test
-
-
-main = pure ()
--- | test
-
-test :: [Int]
-test = L.sort [1,2,3]
+main = do
+  TIO.sort

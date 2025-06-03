@@ -82,7 +82,8 @@ addHscHook hscEnv = hscEnv
               Just neMissing | Just lineToInsertAt <- mLineToInsertAt -> do
                 modifySource lineToInsertAt modFile neMissing
                 throw (Ghc.mkSrcErr . Ghc.mkMessages $ Ghc.consBag importsAddedErr otherDiags)
-              _ -> either throw pure eTcRes
+              _ -> do
+                either throw pure eTcRes
       _ -> runPhaseOrExistingHook phase
       where
       runPhaseOrExistingHook :: Ghc.TPhase res -> IO res
@@ -134,23 +135,17 @@ data InsertLine =
   InsertLine
     !Bool -- True => Add blank line after the imports
     !Int
+  deriving Show
 
 getLineToInsertAt :: Ghc.HsModule Ghc.GhcPs -> Maybe InsertLine
 getLineToInsertAt hsMod = mImportLn <|> mDeclLn
   where
     mImportLn = do
       Ghc.L epAnn _firstImp : _ <- Just $ Ghc.hsmodImports hsMod
-      InsertLine False <$> determineStartLine (Ghc.ann' epAnn)
+      InsertLine False <$> Ghc.determineStartLine epAnn
     mDeclLn = do
       Ghc.L epAnn _firstDecl : _ <- Just $ Ghc.hsmodDecls hsMod
-      InsertLine True <$> determineStartLine (Ghc.ann' epAnn)
-    determineStartLine epAnn = pred <$>
-      case Ghc.comments epAnn of
-        Ghc.EpaComments (Ghc.L comLoc _ : _) ->
-          Just . Ghc.srcSpanStartLine $ Ghc.anchor comLoc
-        Ghc.EpaCommentsBalanced (Ghc.L comLoc _ : _) _ ->
-          Just . Ghc.srcSpanStartLine $ Ghc.anchor comLoc
-        _ -> Ghc.srcSpanStartLine <$> Ghc.epAnnSrcSpan epAnn
+      InsertLine True <$> Ghc.determineStartLine epAnn
 
 mkImportStmt :: (T.Text, Maybe T.Text) -> T.Text
 mkImportStmt (modName, mQual) =
