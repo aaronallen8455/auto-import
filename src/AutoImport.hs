@@ -21,7 +21,8 @@ import qualified Data.Text.IO as T
 import           Data.Time (UTCTime)
 import           Data.Void
 import qualified GHC.Paths as Paths
-import qualified Language.Haskell.GHC.ExactPrint as EP
+import qualified Language.Haskell.GHC.ExactPrint.Parsers as EP
+import qualified Language.Haskell.GHC.ExactPrint.Utils as EP
 import qualified System.Directory as Dir
 import           System.IO.Unsafe (unsafePerformIO)
 import qualified Text.Megaparsec as Parse
@@ -48,42 +49,44 @@ addHscHook hscEnv = hscEnv
   }
   where
     phaseHook mExistingHook = Ghc.PhaseHook $ \phase -> case phase of
-      Ghc.T_Hsc _ modSum -> do
+      Ghc.T_Hsc env modSum -> do
         let modFile = Ghc.ms_hspp_file modSum
             importsAddedErr =
               Ghc.mkPlainErrorMsgEnvelope
                 (Ghc.mkGeneralSrcSpan $ Ghc.mkFastString modFile)
                 (Ghc.ghcUnknownMessage ImportsAddedDiag)
-        -- Parse from file because the parse result from GHC lacks comments
-        eParseResult <- EP.parseModule Paths.libdir modFile
         eTcRes <- try $ runPhaseOrExistingHook phase
-        case eParseResult of
-          Left errs -> throw $ Ghc.mkSrcErr errs
-          Right parseResult -> do
-            let mLineToInsertAt = getLineToInsertAt $ Ghc.unLoc parseResult
-            autoImportCfg <- resolveConfig
-            let msgs = case eTcRes of
-                         Left (Ghc.SourceError m) -> m
-                         Right (_, m) -> m
-                mkMissingModError msgEnv =
-                  case Ghc.errMsgDiagnostic msgEnv of
-                    Ghc.GhcTcRnMessage
-                        (Ghc.TcRnMessageWithInfo _
-                          (Ghc.TcRnMessageDetailed _
-                            (Ghc.TcRnNotInScope Ghc.NotInScope _ [Ghc.MissingModule missingMod] _))
-                        )
-                      | let modTxt = TE.decodeUtf8 . Ghc.bytesFS $ Ghc.moduleNameFS missingMod
-                      , Just (modName, mQuali) <- M.lookup modTxt autoImportCfg
-                      -> Right (modName, mQuali)
-                    _ -> Left msgEnv
-                (otherDiags, missingMods) =
-                  Ghc.partitionBagWith mkMissingModError (Ghc.getMessages msgs)
-            case NE.nonEmpty (toList missingMods) of
-              Just neMissing | Just lineToInsertAt <- mLineToInsertAt -> do
-                modifySource lineToInsertAt modFile neMissing
-                throw (Ghc.mkSrcErr . Ghc.mkMessages $ Ghc.consBag importsAddedErr otherDiags)
-              _ -> do
-                either throw pure eTcRes
+        autoImportCfg <- resolveConfig
+        let msgs = case eTcRes of
+                     Left (Ghc.SourceError m) -> m
+                     Right (_, m) -> m
+            mkMissingModError msgEnv =
+              case Ghc.errMsgDiagnostic msgEnv of
+                Ghc.GhcTcRnMessage
+                    (Ghc.TcRnMessageWithInfo _
+                      (Ghc.TcRnMessageDetailed _
+                        (Ghc.TcRnNotInScope Ghc.NotInScope _ [Ghc.MissingModule missingMod] _))
+                    )
+                  | let modTxt = TE.decodeUtf8 . Ghc.bytesFS $ Ghc.moduleNameFS missingMod
+                  , Just (modName, mQuali) <- M.lookup modTxt autoImportCfg
+                  -> Right (modName, mQuali)
+                _ -> Left msgEnv
+            (otherDiags, missingMods) =
+              Ghc.partitionBagWith mkMissingModError (Ghc.getMessages msgs)
+        case NE.nonEmpty (toList missingMods) of
+          Just neMissing -> do
+            -- Parse from file because the parse result from GHC lacks comments
+            let dynFlags = Ghc.ms_hspp_opts modSum `Ghc.gopt_set` Ghc.Opt_KeepRawTokenStream
+            (eParseResult, _hasCpp) <- parseModule env dynFlags modFile
+            case eParseResult of
+              Left errs -> throw $ Ghc.mkSrcErr errs
+              Right parseResult
+                | Just lineToInsertAt <- getLineToInsertAt $ Ghc.unLoc parseResult
+                -> do
+                  modifySource lineToInsertAt modFile neMissing
+                  throw (Ghc.mkSrcErr . Ghc.mkMessages $ Ghc.consBag importsAddedErr otherDiags)
+              _ -> either throw pure eTcRes
+          _ -> either throw pure eTcRes
       _ -> runPhaseOrExistingHook phase
       where
       runPhaseOrExistingHook :: Ghc.TPhase res -> IO res
@@ -116,6 +119,26 @@ instance Ghc.Diagnostic ConfigParseFailDiag where
 #if !MIN_VERSION_ghc(9,8,0)
   defaultDiagnosticOpts = Ghc.NoDiagnosticOpts
 #endif
+
+-- | Parse the given module file. Accounts for CPP comments
+parseModule
+  :: Ghc.HscEnv
+  -> Ghc.DynFlags
+  -> String
+  -> IO (EP.ParseResult Ghc.ParsedSource, Bool)
+parseModule env dynFlags filePath = EP.ghcWrapper Paths.libdir $ do
+  Ghc.setSession env { Ghc.hsc_dflags = dynFlags }
+  res <- EP.parseModuleEpAnnsWithCppInternal EP.defaultCppOptions dynFlags filePath
+  let eCppComments = fmap (\(c, _, _) -> c) res
+      hasCpp = case eCppComments of
+                 Right cs -> not $ null cs
+                 _ -> False
+  pure
+    ( liftA2 EP.insertCppComments
+        (EP.postParseTransform res)
+        eCppComments
+    , hasCpp
+    )
 
 --------------------------------------------------------------------------------
 -- Modify source
