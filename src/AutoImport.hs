@@ -172,10 +172,23 @@ modifyAST missingMods = fmap addImports . EP.makeDeltaAst
       let lineDelta = if isFirst then 2 else 1
        in Ghc.noAnnSrcSpanDP' $ Ghc.DifferentLine lineDelta 0
     mkImport (isFirst, (modName, mQual)) = Ghc.L (importSrcSpan isFirst) $
-      (Ghc.simpleImportDecl . Ghc.mkModuleName $ T.unpack modName)
-        { Ghc.ideclQualified = Ghc.QualifiedPre
-        , Ghc.ideclAs = Ghc.L Ghc.noSrcSpanA . Ghc.mkModuleName . T.unpack <$> mQual
+      let mn = Ghc.mkModuleName $ T.unpack modName
+       in (Ghc.simpleImportDecl mn)
+            { Ghc.ideclQualified = Ghc.QualifiedPre
+            , Ghc.ideclAs = Ghc.L (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 1)
+                          . Ghc.mkModuleName . T.unpack <$> mQual
+            , Ghc.ideclName = Ghc.L (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 1) mn
+            , Ghc.ideclExt = Ghc.XImportDeclPass importEpAnn Ghc.NoSourceText False
+            }
+    importEpAnn = (Ghc.noAnn :: Ghc.EpAnn Ghc.EpAnnImportDecl)
+#if MIN_VERSION_ghc(9,12,0)
+      { Ghc.anns = Ghc.noAnn
+        { Ghc.importDeclAnnImport = Ghc.EpTok Ghc.noAnn
+        , Ghc.importDeclAnnQualified = Just (Ghc.EpTok EP.d1)
+        , Ghc.importDeclAnnAs = Just (Ghc.EpTok EP.d1)
         }
+      }
+#endif
 
 --------------------------------------------------------------------------------
 -- Config

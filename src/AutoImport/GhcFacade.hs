@@ -22,6 +22,7 @@ import           GHC.Driver.Monad as Ghc
 import           GHC.Tc.Errors.Types as Ghc
 import           GHC.Types.Error as Ghc
 import           GHC.Types.SourceError as Ghc
+import           GHC.Types.SourceText as Ghc
 import           GHC.Types.SrcLoc as Ghc
 import           GHC.Unit.Module.ModSummary as Ghc
 import           GHC.Utils.Error as Ghc
