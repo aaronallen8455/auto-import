@@ -4,9 +4,7 @@ module AutoImport
   ( plugin
   ) where
 
-import           Control.Applicative
 import           Control.Exception (try, throw)
-import           Control.Monad
 import           Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Char as Char
@@ -21,6 +19,7 @@ import qualified Data.Text.IO as T
 import           Data.Time (UTCTime)
 import           Data.Void
 import qualified GHC.Paths as Paths
+import qualified Language.Haskell.GHC.ExactPrint as EP
 import qualified Language.Haskell.GHC.ExactPrint.Parsers as EP
 import qualified Language.Haskell.GHC.ExactPrint.Utils as EP
 import qualified System.Directory as Dir
@@ -71,21 +70,18 @@ addHscHook hscEnv = hscEnv
                   , Just (modName, mQuali) <- M.lookup modTxt autoImportCfg
                   -> Right (modName, mQuali)
                 _ -> Left msgEnv
-            (otherDiags, missingMods) =
+            (_otherDiags, missingMods) =
               Ghc.partitionBagWith mkMissingModError (Ghc.getMessages msgs)
         case NE.nonEmpty (toList missingMods) of
           Just neMissing -> do
             -- Parse from file because the parse result from GHC lacks comments
             let dynFlags = Ghc.ms_hspp_opts modSum `Ghc.gopt_set` Ghc.Opt_KeepRawTokenStream
-            (eParseResult, _hasCpp) <- parseModule env dynFlags modFile
+            (eParseResult, usesCpp) <- parseModule env dynFlags modFile
             case eParseResult of
               Left errs -> throw $ Ghc.mkSrcErr errs
-              Right parseResult
-                | Just lineToInsertAt <- getLineToInsertAt $ Ghc.unLoc parseResult
-                -> do
-                  modifySource lineToInsertAt modFile neMissing
-                  throw (Ghc.mkSrcErr . Ghc.mkMessages $ Ghc.consBag importsAddedErr otherDiags)
-              _ -> either throw pure eTcRes
+              Right parseResult -> do
+                modifyModule parseResult usesCpp neMissing modFile
+                throw . Ghc.mkSrcErr . Ghc.mkMessages $ Ghc.unitBag importsAddedErr
           _ -> either throw pure eTcRes
       _ -> runPhaseOrExistingHook phase
       where
@@ -120,6 +116,10 @@ instance Ghc.Diagnostic ConfigParseFailDiag where
   defaultDiagnosticOpts = Ghc.NoDiagnosticOpts
 #endif
 
+--------------------------------------------------------------------------------
+-- Modify source
+--------------------------------------------------------------------------------
+
 -- | Parse the given module file. Accounts for CPP comments
 parseModule
   :: Ghc.HscEnv
@@ -140,39 +140,42 @@ parseModule env dynFlags filePath = EP.ghcWrapper Paths.libdir $ do
     , hasCpp
     )
 
---------------------------------------------------------------------------------
--- Modify source
---------------------------------------------------------------------------------
+modifyModule
+  :: Ghc.ParsedSource
+  -> Bool
+  -> NE.NonEmpty (T.Text, Maybe T.Text)
+  -> FilePath
+  -> IO ()
+modifyModule parsedMod usesCpp neMissing filePath = do
+  let updatedAst = modifyAST neMissing parsedMod
+  -- If the source contains CPP, newlines are appended
+  -- to the end of the file when exact printing. The simple
+  -- solution is to remove trailing newlines after exact printing
+  -- if the source contains CPP comments.
+      removeTrailingNewlines
+        | usesCpp =
+            reverse . ('\n' :) . dropWhile (== '\n') . reverse
+        | otherwise = id
+      printed = removeTrailingNewlines $ EP.exactPrint updatedAst
+  writeFile filePath printed
 
-modifySource :: InsertLine -> FilePath -> NE.NonEmpty (T.Text, Maybe T.Text) -> IO ()
-modifySource (InsertLine addNewLine lineNo) modFile missingMods = do
-  exists <- Dir.doesFileExist modFile
-  when exists $ do
-    content <- T.readFile modFile
-    let (before, after) = splitAt lineNo $ T.lines content
-        importStmts = mkImportStmt <$> missingMods
-    T.writeFile modFile . T.unlines $ before <> toList importStmts
-      <> (if addNewLine then ("" :) else id) after
-
-data InsertLine =
-  InsertLine
-    !Bool -- True => Add blank line after the imports
-    !Int
-  deriving Show
-
-getLineToInsertAt :: Ghc.HsModule Ghc.GhcPs -> Maybe InsertLine
-getLineToInsertAt hsMod = mImportLn <|> mDeclLn
+modifyAST :: NE.NonEmpty (T.Text, Maybe T.Text) -> Ghc.ParsedSource -> Ghc.ParsedSource
+modifyAST missingMods = fmap addImports . EP.makeDeltaAst
   where
-    mImportLn = do
-      Ghc.L epAnn _firstImp : _ <- Just $ Ghc.hsmodImports hsMod
-      InsertLine False <$> Ghc.determineStartLine epAnn
-    mDeclLn = do
-      Ghc.L epAnn _firstDecl : _ <- Just $ Ghc.hsmodDecls hsMod
-      InsertLine True <$> Ghc.determineStartLine epAnn
-
-mkImportStmt :: (T.Text, Maybe T.Text) -> T.Text
-mkImportStmt (modName, mQual) =
-  "import qualified " <> modName <> foldMap (" as " <>) mQual
+    addImports hsMod = hsMod
+      { Ghc.hsmodImports = Ghc.hsmodImports hsMod ++ newImports hsMod
+      }
+    newImports hsMod = mkImport <$>
+      zip (null (Ghc.hsmodImports hsMod) : repeat False)
+          (NE.toList missingMods)
+    importSrcSpan isFirst =
+      let lineDelta = if isFirst then 2 else 1
+       in EP.noAnnSrcSpanDP Ghc.noSrcSpan $ Ghc.DifferentLine lineDelta 0
+    mkImport (isFirst, (modName, mQual)) = Ghc.L (importSrcSpan isFirst) $
+      (Ghc.simpleImportDecl . Ghc.mkModuleName $ T.unpack modName)
+        { Ghc.ideclQualified = maybe Ghc.NotQualified (const Ghc.QualifiedPre) mQual
+        , Ghc.ideclAs = Ghc.L Ghc.noSrcSpanA . Ghc.mkModuleName . T.unpack <$> mQual
+        }
 
 --------------------------------------------------------------------------------
 -- Config

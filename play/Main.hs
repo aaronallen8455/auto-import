@@ -1,4 +1,6 @@
-module Main where
+module Main
+  (
+  ) where
 
 -- test
 main :: IO ()
