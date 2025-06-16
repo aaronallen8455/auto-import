@@ -1,8 +1,8 @@
 module Case7 where
 
 -- comment
-import qualified Data.Text.IO as TIO
 import           Data.Void
+import qualified Data.Text.IO as TIO
 
 -- | doc
 main :: IO ()

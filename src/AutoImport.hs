@@ -173,7 +173,7 @@ modifyAST missingMods = fmap addImports . EP.makeDeltaAst
        in EP.noAnnSrcSpanDP Ghc.noSrcSpan $ Ghc.DifferentLine lineDelta 0
     mkImport (isFirst, (modName, mQual)) = Ghc.L (importSrcSpan isFirst) $
       (Ghc.simpleImportDecl . Ghc.mkModuleName $ T.unpack modName)
-        { Ghc.ideclQualified = maybe Ghc.NotQualified (const Ghc.QualifiedPre) mQual
+        { Ghc.ideclQualified = Ghc.QualifiedPre
         , Ghc.ideclAs = Ghc.L Ghc.noSrcSpanA . Ghc.mkModuleName . T.unpack <$> mQual
         }
 
