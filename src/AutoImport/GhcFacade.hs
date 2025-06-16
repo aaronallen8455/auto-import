@@ -4,6 +4,7 @@ module AutoImport.GhcFacade
   , epAnnSrcSpan
   , determineStartLine
   , ann'
+  , noAnnSrcSpanDP'
   ) where
 
 import           Control.Applicative ((<|>))
@@ -25,7 +26,14 @@ import           GHC.Types.SrcLoc as Ghc
 import           GHC.Unit.Module.ModSummary as Ghc
 import           GHC.Utils.Error as Ghc
 import           GHC.Utils.Outputable as Ghc
+#if MIN_VERSION_ghc(9,8,0)
 import           GHC.Driver.DynFlags as Ghc
+#else
+import           GHC.Driver.Flags as Ghc
+import           GHC.Driver.Session as Ghc
+#endif
+
+import qualified Language.Haskell.GHC.ExactPrint as EP
 
 #if MIN_VERSION_ghc(9,10,0)
 ann' :: Ghc.EpAnn ann -> Ghc.EpAnn ann
@@ -70,3 +78,11 @@ epAnnSrcSpan epAnn = do
   Ghc.Anchor srcSpan _ <- Just $ Ghc.entry epAnn
 #endif
   Just srcSpan
+
+noAnnSrcSpanDP' :: Ghc.DeltaPos -> Ghc.SrcSpanAnnA --EpAnn ann
+noAnnSrcSpanDP'
+#if MIN_VERSION_ghc(9,10,0)
+  = EP.noAnnSrcSpanDP
+#else
+  = EP.noAnnSrcSpanDP Ghc.noSrcSpan
+#endif

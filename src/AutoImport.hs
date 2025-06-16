@@ -170,7 +170,7 @@ modifyAST missingMods = fmap addImports . EP.makeDeltaAst
           (NE.toList missingMods)
     importSrcSpan isFirst =
       let lineDelta = if isFirst then 2 else 1
-       in EP.noAnnSrcSpanDP Ghc.noSrcSpan $ Ghc.DifferentLine lineDelta 0
+       in Ghc.noAnnSrcSpanDP' $ Ghc.DifferentLine lineDelta 0
     mkImport (isFirst, (modName, mQual)) = Ghc.L (importSrcSpan isFirst) $
       (Ghc.simpleImportDecl . Ghc.mkModuleName $ T.unpack modName)
         { Ghc.ideclQualified = Ghc.QualifiedPre
