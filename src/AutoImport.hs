@@ -1,9 +1,11 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DerivingVia #-}
 module AutoImport
   ( plugin
   ) where
 
+import           Control.Applicative ((<|>))
 import           Control.Exception (try, throw)
 import           Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
@@ -18,6 +20,7 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as T
 import           Data.Time (UTCTime)
 import           Data.Void
+import           GHC.Generics (Generic, Generically(..))
 import qualified GHC.Paths as Paths
 import qualified Language.Haskell.GHC.ExactPrint as EP
 import qualified Language.Haskell.GHC.ExactPrint.Parsers as EP
@@ -67,8 +70,8 @@ addHscHook hscEnv = hscEnv
                         (Ghc.TcRnNotInScope Ghc.NotInScope _ [Ghc.MissingModule missingMod] _))
                     )
                   | let modTxt = TE.decodeUtf8 . Ghc.bytesFS $ Ghc.moduleNameFS missingMod
-                  , Just (modName, mQuali) <- M.lookup modTxt autoImportCfg
-                  -> Right (modName, mQuali)
+                  , Just qualMod <- M.lookup modTxt (qualModules autoImportCfg)
+                  -> Right qualMod
                 _ -> Left msgEnv
             (_otherDiags, missingMods) =
               Ghc.partitionBagWith mkMissingModError (Ghc.getMessages msgs)
@@ -143,7 +146,7 @@ parseModule env dynFlags filePath = EP.ghcWrapper Paths.libdir $ do
 modifyModule
   :: Ghc.ParsedSource
   -> Bool
-  -> NE.NonEmpty (T.Text, Maybe T.Text)
+  -> NE.NonEmpty QualMod
   -> FilePath
   -> IO ()
 modifyModule parsedMod usesCpp neMissing filePath = do
@@ -159,7 +162,7 @@ modifyModule parsedMod usesCpp neMissing filePath = do
       printed = removeTrailingNewlines $ EP.exactPrint updatedAst
   writeFile filePath printed
 
-modifyAST :: NE.NonEmpty (T.Text, Maybe T.Text) -> Ghc.ParsedSource -> Ghc.ParsedSource
+modifyAST :: NE.NonEmpty QualMod -> Ghc.ParsedSource -> Ghc.ParsedSource
 modifyAST missingMods = fmap addImports . EP.makeDeltaAst
   where
     addImports hsMod = hsMod
@@ -171,12 +174,12 @@ modifyAST missingMods = fmap addImports . EP.makeDeltaAst
     importSrcSpan isFirst =
       let lineDelta = if isFirst then 2 else 1
        in Ghc.noAnnSrcSpanDP' $ Ghc.DifferentLine lineDelta 0
-    mkImport (isFirst, (modName, mQual)) = Ghc.L (importSrcSpan isFirst) $
-      let mn = Ghc.mkModuleName $ T.unpack modName
+    mkImport (isFirst, qualMod) = Ghc.L (importSrcSpan isFirst) $
+      let mn = Ghc.mkModuleName $ T.unpack (modName qualMod)
        in (Ghc.simpleImportDecl mn)
             { Ghc.ideclQualified = Ghc.QualifiedPre
             , Ghc.ideclAs = Ghc.L (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 1)
-                          . Ghc.mkModuleName . T.unpack <$> mQual
+                          . Ghc.mkModuleName . T.unpack <$> modQual qualMod
             , Ghc.ideclName = Ghc.L (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 1) mn
             , Ghc.ideclExt = Ghc.XImportDeclPass importEpAnn Ghc.NoSourceText False
             }
@@ -205,7 +208,24 @@ configCacheRef :: IORef (Maybe ConfigCache)
 configCacheRef = unsafePerformIO $ newIORef Nothing
 {-# NOINLINE configCacheRef #-}
 
-type Config = M.Map T.Text (T.Text, Maybe T.Text)
+data Config = Config
+  { qualModules :: QualMods
+  , unqualIdentifiers :: UnqualIdentifiers
+  } deriving (Generic, Show)
+    deriving (Semigroup, Monoid) via Generically Config
+
+type QualMods = M.Map T.Text QualMod
+data QualMod = QualMod
+  { modName :: T.Text
+  , modQual :: Maybe T.Text
+  } deriving Show
+
+type UnqualIdentifiers = M.Map T.Text UnqualIdentifier
+data UnqualIdentifier = UnqualIdentifier
+  { importByMod :: T.Text
+  , identifier :: T.Text
+  , parentTy :: Maybe T.Text
+  } deriving Show
 
 localConfigFile, homeConfigFile :: FilePath
 localConfigFile = "./.autoimport"
@@ -270,24 +290,84 @@ parseConfig :: String -> T.Text -> Either String Config
 parseConfig fileName content =
     first Parse.errorBundlePretty $ Parse.runParser parser fileName content
   where
-    parser = M.fromList
-           . map (\(name, mQual) -> (fromMaybe name mQual, (name, mQual)))
-           <$> (Parse.many parseLine <* Parse.space <* Parse.eof)
+    parser = do
+      mconcat
+        <$> (Parse.many parseConfigEntry <* Parse.space <* Parse.eof)
 
-parseLine :: Parse.Parsec Void T.Text (T.Text, Maybe T.Text)
-parseLine = do
-  modName <- parseModName
+parseConfigEntry :: Parse.Parsec Void T.Text Config
+parseConfigEntry = do
+  moName <- parseModName
+  config <-
+    Parse.try ((\ids -> mempty
+      {unqualIdentifiers = M.fromList $ (\i -> (identifier i, i)) <$> ids}
+         ) <$> parseUnqualIds moName)
+    <|> ((\qualMod -> mempty
+      {qualModules = M.singleton (fromMaybe (modName qualMod) (modQual qualMod)) qualMod}
+       ) <$> parseQualMod moName)
+  _ <- Parse.hspace <* Parse.optional Parse.eol
+  pure config
+
+parseQualMod :: T.Text -> Parse.Parsec Void T.Text QualMod
+parseQualMod moName = do
   mQual <- Parse.optional . Parse.try $ do
     Parse.hspace1 *> Parse.string "as" *> Parse.hspace1
     parseModName
-  _ <- Parse.hspace <* Parse.optional Parse.eol
-  pure (modName, mQual)
+  pure $ QualMod moName mQual
 
 parseModName :: Parse.Parsec Void T.Text T.Text
 parseModName = T.intercalate "." <$> Parse.sepBy1 parseSegment (Parse.char '.')
   where
     parseSegment = do
-      h <- Parse.satisfy Char.isUpper Parse.<?> "uppercase char"
+      h <- Parse.upperChar
       rest <- Parse.many (Parse.satisfy (\c -> Char.isAlphaNum c || c == '_'))
         Parse.<?> "module name chars"
       pure . T.pack $ h : rest
+
+parseUnqualIds :: T.Text -> Parse.Parsec Void T.Text [UnqualIdentifier]
+parseUnqualIds moName = concat <$> do
+  Parse.hspace
+  Parse.between (Parse.char '(' <* Parse.hspace) (Parse.char ')' <* Parse.hspace)
+    (Parse.sepBy1 (parseIdentifier moName) (Parse.char ',' <* Parse.hspace))
+
+parseIdentifier :: T.Text -> Parse.Parsec Void T.Text [UnqualIdentifier]
+parseIdentifier moName = do
+  parent <- identP <|> operatorP
+  if not (T.all Char.isAlpha $ T.take 1 parent)
+     || T.all Char.isUpper (T.take 1 parent)
+  then do
+    Parse.hspace
+    mChildIds <- Parse.optional childIdsP
+    case mChildIds of
+      Nothing -> pure
+        [ UnqualIdentifier
+          { importByMod = moName
+          , identifier = parent
+          , parentTy = Nothing
+          }
+        ]
+      Just childIds -> pure $
+        (\cid -> UnqualIdentifier
+          { importByMod = moName
+          , identifier = cid
+          , parentTy = Just parent
+          }) <$> childIds
+  else
+    pure [
+      UnqualIdentifier
+        { importByMod = moName
+        , identifier = parent
+        , parentTy = Nothing
+        }]
+
+  where
+    identP = do
+      fc <- Parse.letterChar
+      rest <- Parse.many (Parse.satisfy (\c -> Char.isAlphaNum c || c `elem` ['_', '\'', '#']))
+        Parse.<?> "identifier chars"
+      pure . T.pack $ fc : rest
+    operatorP = T.pack <$>
+      Parse.between (Parse.char '(' <* Parse.hspace) (Parse.char ')' <* Parse.hspace)
+        (Parse.some (Parse.oneOf (":!#$%&*+./<=>?@\\^|-~" :: String) Parse.<?> "operator char"))
+    childIdsP =
+      Parse.between (Parse.char '(' <* Parse.hspace) (Parse.char ')' <* Parse.hspace) $
+        Parse.sepBy1 (identP <|> operatorP) (Parse.char ',' <* Parse.hspace)
