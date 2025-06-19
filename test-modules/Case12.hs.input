@@ -1,0 +1,4 @@
+module Case12 where
+
+main :: IO ()
+main = f1 b2 Bar baz

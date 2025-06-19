@@ -1,0 +1,6 @@
+module Case10 where
+
+import Foo (Foo(f1))
+
+main :: IO ()
+main = f1

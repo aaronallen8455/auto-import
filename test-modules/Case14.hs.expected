@@ -1,0 +1,6 @@
+module Case14 where
+
+import Ops ((:::))
+
+main :: IO ()
+main = 1 ::: 2

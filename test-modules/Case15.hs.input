@@ -1,0 +1,4 @@
+module Case15 where
+
+main :: IO ()
+main = a ::: a *** a

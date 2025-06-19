@@ -1,3 +1,4 @@
 Data.Text.IO as TIO
 Data.List
 Foo (Foo(f1, b2), Bar, baz)
+Ops ((+++), (:::)(a, (***)))

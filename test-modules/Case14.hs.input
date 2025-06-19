@@ -1,0 +1,4 @@
+module Case14 where
+
+main :: IO ()
+main = 1 ::: 2

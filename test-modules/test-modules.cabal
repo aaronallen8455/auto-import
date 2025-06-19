@@ -44,3 +44,31 @@ executable Case7
 executable Case8
     import: attrs
     main-is: Case8.hs
+
+executable Case9
+    import: attrs
+    main-is: Case9.hs
+
+executable Case10
+    import: attrs
+    main-is: Case10.hs
+
+executable Case11
+    import: attrs
+    main-is: Case11.hs
+
+executable Case12
+    import: attrs
+    main-is: Case12.hs
+
+executable Case13
+    import: attrs
+    main-is: Case13.hs
+
+executable Case14
+    import: attrs
+    main-is: Case14.hs
+
+executable Case15
+    import: attrs
+    main-is: Case15.hs

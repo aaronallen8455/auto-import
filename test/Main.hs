@@ -9,7 +9,7 @@ import qualified System.Process as Proc
 
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
-  [ testGroup "cases"
+  [ testGroup "qualified"
     [ testCase "1" $ runTest "Case1.hs"
     , testCase "2" $ runTest "Case2.hs"
     , testCase "3" $ runTest "Case3.hs"
@@ -18,6 +18,15 @@ main = defaultMain $ testGroup "Tests"
     , testCase "6" $ runTest "Case6.hs"
     , testCase "7" $ runTest "Case7.hs"
     , testCase "8" $ runTest "Case8.hs"
+    ]
+  , testGroup "unqualified"
+    [ testCase "9" $ runTest "Case9.hs"
+    , testCase "10" $ runTest "Case10.hs"
+    , testCase "11" $ runTest "Case11.hs"
+    , testCase "12" $ runTest "Case12.hs"
+    , testCase "13" $ runTest "Case13.hs"
+    , testCase "14" $ runTest "Case14.hs"
+    , testCase "15" $ runTest "Case15.hs"
     ]
   ]
 

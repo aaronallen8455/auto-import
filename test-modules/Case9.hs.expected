@@ -1,0 +1,6 @@
+module Case9 where
+
+import Foo (Foo)
+
+main :: IO ()
+main = Foo

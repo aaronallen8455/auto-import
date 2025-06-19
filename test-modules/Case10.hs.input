@@ -1,0 +1,4 @@
+module Case10 where
+
+main :: IO ()
+main = f1
