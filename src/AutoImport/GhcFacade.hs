@@ -20,13 +20,17 @@ import           GHC.Driver.Pipeline.Phases as Ghc
 import           GHC.Driver.Plugins as Ghc
 import           GHC.Driver.Monad as Ghc
 import           GHC.Tc.Errors.Types as Ghc
+import           GHC.Tc.Types.Constraint as Ghc
 import           GHC.Types.Error as Ghc
+import           GHC.Types.Name.Occurrence as Ghc
+import           GHC.Types.Name.Reader as Ghc
 import           GHC.Types.SourceError as Ghc
 import           GHC.Types.SourceText as Ghc
 import           GHC.Types.SrcLoc as Ghc
 import           GHC.Unit.Module.ModSummary as Ghc
 import           GHC.Utils.Error as Ghc
 import           GHC.Utils.Outputable as Ghc
+import           GHC.Utils.Misc as Ghc
 #if MIN_VERSION_ghc(9,8,0)
 import           GHC.Driver.DynFlags as Ghc
 #else

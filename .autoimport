@@ -1,2 +1,3 @@
 Data.Text.IO as TIO
 Data.List as L
+Data.Functor.Identity (Identity(runIdentity,foo), (+++), bar)

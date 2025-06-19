@@ -1,0 +1,6 @@
+module Case8 where
+
+main :: IO ()
+main = do
+  TIO.putStrLn "hi"
+  TIO.putStrLn "bye"
