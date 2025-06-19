@@ -1,10 +1,15 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 module AutoImport.GhcFacade
   ( module Ghc
   , epAnnSrcSpan
   , determineStartLine
   , ann'
   , noAnnSrcSpanDP'
+  , nameParensAdornment
+  , ieThingWithAnn
+  , importListAnn
+  , operatorNameAnn
   ) where
 
 import           Control.Applicative ((<|>))
@@ -90,4 +95,63 @@ noAnnSrcSpanDP'
   = EP.noAnnSrcSpanDP
 #else
   = EP.noAnnSrcSpanDP Ghc.noSrcSpan
+#endif
+
+nameParensAdornment :: Ghc.NameAdornment
+nameParensAdornment =
+#if MIN_VERSION_ghc(9,12,0)
+  Ghc.NameParens (Ghc.EpTok EP.d0) (Ghc.EpTok EP.d0)
+#else
+  Ghc.NameParens
+#endif
+
+ieThingWithAnn :: Ghc.XIEThingWith Ghc.GhcPs
+ieThingWithAnn =
+#if MIN_VERSION_ghc(9,12,0)
+  (Nothing, (Ghc.EpTok EP.d0, Ghc.noAnn, Ghc.noAnn, Ghc.EpTok EP.d0))
+#else
+  (Nothing, [Ghc.AddEpAnn Ghc.AnnOpenP EP.d0, Ghc.AddEpAnn Ghc.AnnCloseP EP.d0])
+#endif
+
+#if MIN_VERSION_ghc(9,12,0)
+importListAnn :: Ghc.EpAnn (Ghc.AnnList (Ghc.EpToken "hiding", [Ghc.EpToken ","]))
+#else
+importListAnn :: Ghc.EpAnn Ghc.AnnList
+#endif
+importListAnn =
+  (noAnnSrcSpanDP' $ Ghc.SameLine 0)
+#if MIN_VERSION_ghc(9,12,0)
+    { Ghc.anns = (Ghc.noAnn :: Ghc.AnnList (Ghc.EpToken "hiding", [Ghc.EpToken ","]))
+      { Ghc.al_brackets = Ghc.ListParens (Ghc.EpTok EP.d1) (Ghc.EpTok EP.d0)
+      , Ghc.al_rest = (Ghc.noAnn, [])
+      }
+    }
+#else
+    { Ghc.anns = (Ghc.noAnn :: Ghc.AnnList)
+      { Ghc.al_open = Just $ Ghc.AddEpAnn Ghc.AnnOpenP EP.d1
+      , Ghc.al_close = Just $ Ghc.AddEpAnn Ghc.AnnCloseP EP.d0
+      }
+    }
+#endif
+
+operatorNameAnn :: Ghc.EpAnn Ghc.NameAnn
+operatorNameAnn =
+#if MIN_VERSION_ghc(9,12,0)
+  (Ghc.noAnn :: Ghc.EpAnn Ghc.NameAnn)
+    { Ghc.anns = Ghc.NameAnn
+      { Ghc.nann_adornment = Ghc.nameParensAdornment
+      , Ghc.nann_name = Ghc.noAnn
+      , Ghc.nann_trailing  = []
+      }
+    }
+#else
+  (Ghc.noAnn :: Ghc.EpAnn Ghc.NameAnn)
+    { Ghc.anns = Ghc.NameAnn
+      { Ghc.nann_adornment = nameParensAdornment
+      , Ghc.nann_name = Ghc.noAnn
+      , Ghc.nann_trailing  = []
+      , Ghc.nann_open = Ghc.noAnn
+      , Ghc.nann_close = Ghc.noAnn
+      }
+    }
 #endif

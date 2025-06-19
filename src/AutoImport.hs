@@ -220,17 +220,11 @@ modifyAST missingThings parsedSource =
             zip
               (True : repeat False)
               (associateUnqualIds ids)
-          impListAnn = (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 0)
-            { Ghc.anns = (Ghc.noAnn :: Ghc.AnnList (Ghc.EpToken "hiding", [Ghc.EpToken ","]))
-              { Ghc.al_brackets = Ghc.ListParens (Ghc.EpTok EP.d1) (Ghc.EpTok EP.d0)
-              , Ghc.al_rest = (Ghc.noAnn, [])
-              }
-            }
        in Ghc.L (importSrcSpan isFirst)
           (Ghc.simpleImportDecl mn)
             { Ghc.ideclName = Ghc.L (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 1) mn
             , Ghc.ideclExt = Ghc.XImportDeclPass importEpAnn Ghc.NoSourceText False
-            , Ghc.ideclImportList = Just (Ghc.Exactly, Ghc.L impListAnn impList)
+            , Ghc.ideclImportList = Just (Ghc.Exactly, Ghc.L Ghc.importListAnn impList)
             }
     importEpAnn = (Ghc.noAnn :: Ghc.EpAnn Ghc.EpAnnImportDecl)
 #if MIN_VERSION_ghc(9,12,0)
@@ -290,9 +284,7 @@ mkIE :: Bool -> (IdInfo, [IdInfo]) -> Ghc.LIE Ghc.GhcPs
 mkIE isFirstItem (parentId, children) = Ghc.L (ieLoc isFirstItem) $
   case children of
     [] -> Ghc.IEVar Nothing (mkIEWrappedName True parentId) Nothing
-    _ ->
-      let ieThingWithAnn = (Ghc.EpTok EP.d0, Ghc.noAnn, Ghc.noAnn, Ghc.EpTok EP.d0)
-       in Ghc.IEThingWith (Nothing, ieThingWithAnn)
+    _ -> Ghc.IEThingWith Ghc.ieThingWithAnn
            (mkIEWrappedName True parentId)
            Ghc.NoIEWildcard
            (addCommas $ uncurry mkIEWrappedName <$> zip (True : repeat False) children)
@@ -306,14 +298,7 @@ mkIEWrappedName isFirst i =
     . txtToRdrName $ idLabel i
   where
     nameAnn :: Bool -> Ghc.EpAnn Ghc.NameAnn
-    nameAnn True = (Ghc.noAnn :: Ghc.EpAnn Ghc.NameAnn)
-      { Ghc.anns = Ghc.NameAnn
-        { Ghc.nann_adornment =
-            Ghc.NameParens (Ghc.EpTok EP.d0) (Ghc.EpTok EP.d0)
-        , Ghc.nann_name = Ghc.noAnn
-        , Ghc.nann_trailing  = []
-        }
-      }
+    nameAnn True = Ghc.operatorNameAnn
     nameAnn False = Ghc.noAnn
     ieLoc = Ghc.noAnnSrcSpanDP' $ Ghc.SameLine (if isFirst then 0 else 1)
 
