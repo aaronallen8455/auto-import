@@ -144,14 +144,14 @@ importListAnn :: Ghc.SrcSpanAnn' (Ghc.EpAnn Ghc.AnnList)
 #endif
 importListAnn =
 #if MIN_VERSION_ghc(9,12,0)
-  (noAnnSrcSpanDP' $ Ghc.SameLine 0)
+  (noAnnSrcSpanDP' @(Ghc.AnnList (Ghc.EpToken "hiding", [Ghc.EpToken ","])) $ Ghc.SameLine 0)
     { Ghc.anns = (Ghc.noAnn :: Ghc.AnnList (Ghc.EpToken "hiding", [Ghc.EpToken ","]))
       { Ghc.al_brackets = Ghc.ListParens (Ghc.EpTok EP.d1) (Ghc.EpTok EP.d0)
       , Ghc.al_rest = (Ghc.noAnn, [])
       }
     }
 #elif MIN_VERSION_ghc(9,10,0)
-  (noAnnSrcSpanDP' $ Ghc.SameLine 0)
+  (noAnnSrcSpanDP' @Ghc.AnnList $ Ghc.SameLine 0)
     { Ghc.anns = (Ghc.noAnn :: Ghc.AnnList)
       { Ghc.al_open = Just $ Ghc.AddEpAnn Ghc.AnnOpenP EP.d1
       , Ghc.al_close = Just $ Ghc.AddEpAnn Ghc.AnnCloseP EP.d0
@@ -182,7 +182,7 @@ nameAnn True =
 #if MIN_VERSION_ghc(9,12,0)
   (Ghc.noAnn :: Ghc.EpAnn Ghc.NameAnn)
     { Ghc.anns = Ghc.NameAnn
-      { Ghc.nann_adornment = Ghc.nameParensAdornment
+      { Ghc.nann_adornment = nameParensAdornment
       , Ghc.nann_name = Ghc.noAnn
       , Ghc.nann_trailing  = []
       }
