@@ -85,3 +85,5 @@ likewise for a cabal project (you may need to run `cabal update` first):
 ```
 cabal repl my-project --build-depends auto-import --repl-options='-fplugin AutoSplit'
 ```
+
+This plugin aims to support the four most recent major GHC releases.

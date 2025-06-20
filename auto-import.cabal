@@ -23,9 +23,9 @@ library
     -- other-modules:
     default-extensions: LambdaCase, OverloadedStrings
     build-depends:    base,
-                      ghc,
+                      ghc >= 9.6 && < 9.13,
                       bytestring,
-                      megaparsec,
+                      megaparsec >= 9 && < 10,
                       text,
                       containers,
                       directory,
@@ -34,18 +34,6 @@ library
                       ghc-paths
     hs-source-dirs:   src
     default-language: GHC2021
-
-executable play
-    import:           warnings
-    default-language: GHC2021
-    other-modules: Ops
-    -- other-extensions:
-    hs-source-dirs:   play
-    main-is:          Main.hs
-    build-depends:
-        base,
-        auto-import
-    ghc-options: -fplugin AutoImport
 
 test-suite auto-import-test
     import:           warnings
