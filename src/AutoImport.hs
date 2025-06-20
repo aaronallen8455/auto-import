@@ -283,7 +283,7 @@ associateUnqualIds ids = M.toList . M.fromListWith (<>) $ do
 mkIE :: Bool -> (IdInfo, [IdInfo]) -> Ghc.LIE Ghc.GhcPs
 mkIE isFirstItem (parentId, children) = Ghc.L (ieLoc isFirstItem) $
   case children of
-    [] -> Ghc.IEVar' Nothing (mkIEWrappedName True parentId)
+    [] -> Ghc.IEVar' (mkIEWrappedName True parentId)
     _ -> Ghc.IEThingWith' Ghc.ieThingWithAnn
            (mkIEWrappedName True parentId)
            Ghc.NoIEWildcard

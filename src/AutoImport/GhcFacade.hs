@@ -123,12 +123,16 @@ ieThingWithAnn =
   (Nothing, (Ghc.EpTok EP.d0, Ghc.noAnn, Ghc.noAnn, Ghc.EpTok EP.d0))
 #elif MIN_VERSION_ghc(9,10,0)
   (Nothing, [Ghc.AddEpAnn Ghc.AnnOpenP EP.d0, Ghc.AddEpAnn Ghc.AnnCloseP EP.d0])
-#else
+#elif MIN_VERSION_ghc(9,8,0)
   ( Nothing
   , Ghc.EpAnn (Ghc.Anchor Ghc.placeholderRealSpan EP.m0)
       [Ghc.AddEpAnn Ghc.AnnOpenP EP.d0, Ghc.AddEpAnn Ghc.AnnCloseP EP.d0]
       Ghc.emptyComments
   )
+#else
+  Ghc.EpAnn (Ghc.Anchor Ghc.placeholderRealSpan EP.m0)
+    [Ghc.AddEpAnn Ghc.AnnOpenP EP.d0, Ghc.AddEpAnn Ghc.AnnCloseP EP.d0]
+    Ghc.emptyComments
 #endif
 
 #if MIN_VERSION_ghc(9,12,0)
@@ -236,11 +240,13 @@ pattern IEThingWith' x name wc children = Ghc.IEThingWith x name wc children Not
 pattern IEThingWith' x name wc children = Ghc.IEThingWith x name wc children
 #endif
 
-pattern IEVar' :: XIEVar Ghc.GhcPs -> LIEWrappedName Ghc.GhcPs -> Ghc.IE Ghc.GhcPs
+pattern IEVar' :: LIEWrappedName Ghc.GhcPs -> Ghc.IE Ghc.GhcPs
 #if MIN_VERSION_ghc(9,10,0)
-pattern IEVar' x name = Ghc.IEVar x name Nothing
+pattern IEVar' name = Ghc.IEVar Nothing name Nothing
+#elif MIN_VERSION_ghc(9,8,0)
+pattern IEVar' name = Ghc.IEVar Nothing name
 #else
-pattern IEVar' x name = Ghc.IEVar x name
+pattern IEVar' name = Ghc.IEVar Ghc.NoExtField name
 #endif
 
 pattern TcRnSolverReport' :: Ghc.SolverReportWithCtxt -> Ghc.TcRnMessage
