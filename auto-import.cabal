@@ -38,7 +38,7 @@ library
 executable play
     import:           warnings
     default-language: GHC2021
-    -- other-modules:
+    other-modules: Ops
     -- other-extensions:
     hs-source-dirs:   play
     main-is:          Main.hs

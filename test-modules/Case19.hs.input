@@ -1,0 +1,6 @@
+module Case19 where
+
+import Ops ((+++), (:::))
+
+main :: IO ()
+main = a *** a

@@ -72,3 +72,23 @@ executable Case14
 executable Case15
     import: attrs
     main-is: Case15.hs
+
+executable Case16
+    import: attrs
+    main-is: Case16.hs
+    other-modules: Foo
+
+executable Case17
+    import: attrs
+    main-is: Case17.hs
+    other-modules: Foo
+
+executable Case18
+    import: attrs
+    main-is: Case18.hs
+    other-modules: Ops
+
+executable Case19
+    import: attrs
+    main-is: Case19.hs
+    other-modules: Ops

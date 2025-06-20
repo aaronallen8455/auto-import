@@ -12,9 +12,11 @@ module AutoImport.GhcFacade
   , importListAnn
   , nameAnn
   , importEpAnn
+  , hasTrailingComma
   , pattern IEThingWith'
   , pattern IEVar'
   , pattern TcRnSolverReport'
+  , pattern IEThingAbs'
   ) where
 
 import           Control.Applicative ((<|>))
@@ -215,7 +217,12 @@ nameAnn True =
 #endif
 
 importEpAnn :: Ghc.EpAnn Ghc.EpAnnImportDecl
-#if MIN_VERSION_ghc(9,10,0)
+#if MIN_VERSION_ghc(9,12,0)
+importEpAnn = (Ghc.noAnn :: Ghc.EpAnn Ghc.EpAnnImportDecl)
+  { Ghc.anns = Ghc.noAnn
+    { Ghc.importDeclAnnImport = Ghc.EpTok Ghc.noAnn }
+  }
+#elif MIN_VERSION_ghc(9,10,0)
 importEpAnn = Ghc.noAnn
 #else
 importEpAnn =
@@ -233,11 +240,30 @@ importEpAnn =
     }
 #endif
 
+hasTrailingComma :: SrcSpanAnnA -> Bool
+#if MIN_VERSION_ghc(9,10,0)
+hasTrailingComma = any (\case Ghc.AddCommaAnn{} -> True; _ -> False)
+  . Ghc.lann_trailing . Ghc.anns
+#else
+hasTrailingComma x  =
+  case Ghc.ann x of
+    Ghc.EpAnnNotUsed -> False
+    ann -> any (\case Ghc.AddCommaAnn{} -> True; _ -> False)
+         . Ghc.lann_trailing $ Ghc.anns ann
+#endif
+
 pattern IEThingWith' :: XIEThingWith Ghc.GhcPs -> LIEWrappedName Ghc.GhcPs -> IEWildcard -> [LIEWrappedName Ghc.GhcPs] -> Ghc.IE Ghc.GhcPs
 #if MIN_VERSION_ghc(9,10,0)
 pattern IEThingWith' x name wc children = Ghc.IEThingWith x name wc children Nothing
 #else
 pattern IEThingWith' x name wc children = Ghc.IEThingWith x name wc children
+#endif
+
+pattern IEThingAbs' :: LIEWrappedName Ghc.GhcPs -> Ghc.IE Ghc.GhcPs
+#if MIN_VERSION_ghc(9,10,0)
+pattern IEThingAbs' name <- Ghc.IEThingAbs _ name _
+#else
+pattern IEThingAbs' name <- Ghc.IEThingAbs _ name
 #endif
 
 pattern IEVar' :: LIEWrappedName Ghc.GhcPs -> Ghc.IE Ghc.GhcPs

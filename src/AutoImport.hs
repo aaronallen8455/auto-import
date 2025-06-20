@@ -262,11 +262,11 @@ addIdsToExistingImports idMap = foldr go (idMap, [])
                 addIdsToExistingIEs idsWithParentMap existingIEs
               idsWithoutParentDeduped =
                 filter (\x -> M.notMember (identifier x) idsWithParentMap) idsWithoutParent
-              newIEs = addCommas $ uncurry mkIE <$>
+              newIEs = uncurry mkIE <$>
                 zip
-                  (True : repeat False)
+                  (null updatedExistingIEs : repeat False)
                   (associateUnqualIds (idsWithoutParentDeduped ++ fold idsWithParentToAdd))
-              updatedImportList = (Ghc.Exactly, Ghc.L idsLoc $ updatedExistingIEs ++ newIEs)
+              updatedImportList = (Ghc.Exactly, Ghc.L idsLoc . addCommas $ updatedExistingIEs ++ newIEs)
               newDecl = idec { Ghc.ideclImportList = Just updatedImportList }
              in (M.delete hsModName iMap, Ghc.L iLoc newDecl : acc)
           _ -> (iMap, idecl : acc)
@@ -301,7 +301,9 @@ mkIEWrappedName isFirst i =
 addCommas :: [Ghc.GenLocated Ghc.SrcSpanAnnA e] -> [Ghc.GenLocated Ghc.SrcSpanAnnA e]
 addCommas [] = []
 addCommas [x] = [x]
-addCommas (Ghc.L ann x : xs) = Ghc.L (EP.addComma ann) x : addCommas xs
+addCommas (Ghc.L ann x : xs) =
+  Ghc.L (if Ghc.hasTrailingComma ann then ann else EP.addComma ann) x
+  : addCommas xs
 
 addIdsToExistingIEs
   :: M.Map T.Text [UnqualIdentifier] -- keyed by parent ty name
@@ -309,15 +311,27 @@ addIdsToExistingIEs
   -> (M.Map T.Text [UnqualIdentifier], [Ghc.LIE Ghc.GhcPs])
 addIdsToExistingIEs idsMap = foldr go (idsMap, [])
   where
+    go (Ghc.L ieLoc (Ghc.IEThingAbs' name)) (idMap, acc)
+      | Ghc.IEName _ (Ghc.L _ rdrName) <- Ghc.unLoc name
+      , let nameTxt = T.pack $ EP.rdrName2String rdrName
+      , Just ids <- M.lookup nameTxt idMap
+      , let newChildren =
+              uncurry mkIEWrappedName . fmap toIdInfo <$>
+              zip (True : repeat False) ids
+            newLie = Ghc.L ieLoc
+              (Ghc.IEThingWith' Ghc.ieThingWithAnn name Ghc.NoIEWildcard (addCommas newChildren))
+      = ( M.delete nameTxt idMap
+        , newLie : acc
+        )
     go (Ghc.L ieLoc (Ghc.IEThingWith' x name wc children))
        (idMap, acc)
       | Ghc.IEName _ (Ghc.L _ rdrName) <- Ghc.unLoc name
       , let nameTxt = T.pack $ EP.rdrName2String rdrName
       , Just ids <- M.lookup nameTxt idMap
-      , let newChildren = addCommas $
+      , let newChildren =
               uncurry mkIEWrappedName . fmap toIdInfo <$>
               zip (null children : repeat False) ids
-            newLie = Ghc.L ieLoc (Ghc.IEThingWith' x name wc (children ++ newChildren))
+            newLie = Ghc.L ieLoc (Ghc.IEThingWith' x name wc (addCommas $ children ++ newChildren))
       = ( M.delete nameTxt idMap
         , newLie : acc
         )

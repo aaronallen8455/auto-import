@@ -1,0 +1,6 @@
+module Case16 where
+
+import Foo (Foo(f1, b2), baz, Bar)
+
+main :: IO ()
+main = f1 b2 Bar baz

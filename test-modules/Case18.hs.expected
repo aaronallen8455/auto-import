@@ -1,0 +1,6 @@
+module Case18 where
+
+import Ops ((+++), (:::)(a, (***)))
+
+main :: IO ()
+main = a ::: a *** a

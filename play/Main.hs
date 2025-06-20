@@ -2,13 +2,17 @@ module Main
   (
   ) where
 
-import qualified Data.List as L
+-- import qualified Data.List as L
+-- 
+-- -- import           Data.Functor.Identity (Identity(runIdentity), foo, bar)
+-- -- import Data.Functor.IdentityIdentityrunIdentity
+-- 
+-- -- test
+-- main :: IO ()
+-- main = do
+--   L.sort
+--   foo +++ bar
 
--- import           Data.Functor.Identity (Identity(runIdentity), foo, bar)
--- import Data.Functor.IdentityIdentityrunIdentity
 
--- test
 main :: IO ()
-main = do
-  L.sort
-  foo +++ bar
+main = method ::: method *** method
