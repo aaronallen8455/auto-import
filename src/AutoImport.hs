@@ -78,9 +78,9 @@ addHscHook hscEnv = hscEnv
                 Ghc.GhcTcRnMessage
                     (Ghc.TcRnMessageWithInfo _
                       (Ghc.TcRnMessageDetailed _
-                        (Ghc.TcRnSolverReport report _)
+                        (Ghc.TcRnSolverReport' report )
                     ))
-                  | Ghc.ReportHoleError hole (Ghc.OutOfScopeHole _ _)
+                  | Ghc.ReportHoleError hole Ghc.OutOfScopeHole{}
                       <- Ghc.reportContent report
                   , Just unqualId <- M.lookup (T.pack . EP.rdrName2String $ Ghc.hole_occ hole) (unqualIdentifiers autoImportCfg)
                   -> Right $ MissingId unqualId
@@ -211,7 +211,7 @@ modifyAST missingThings parsedSource =
             , Ghc.ideclAs = Ghc.L (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 1)
                           . Ghc.mkModuleName . T.unpack <$> modQual qualMod
             , Ghc.ideclName = Ghc.L (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 1) mn
-            , Ghc.ideclExt = Ghc.XImportDeclPass importEpAnn Ghc.NoSourceText False
+            , Ghc.ideclExt = Ghc.XImportDeclPass importEpAnnQual Ghc.NoSourceText False
             }
     mkUnqualImport :: (Bool, (T.Text, [UnqualIdentifier])) -> Ghc.LImportDecl Ghc.GhcPs
     mkUnqualImport (isFirst, (moName, ids)) =
@@ -223,10 +223,10 @@ modifyAST missingThings parsedSource =
        in Ghc.L (importSrcSpan isFirst)
           (Ghc.simpleImportDecl mn)
             { Ghc.ideclName = Ghc.L (Ghc.noAnnSrcSpanDP' $ Ghc.SameLine 1) mn
-            , Ghc.ideclExt = Ghc.XImportDeclPass importEpAnn Ghc.NoSourceText False
+            , Ghc.ideclExt = Ghc.XImportDeclPass Ghc.importEpAnn Ghc.NoSourceText False
             , Ghc.ideclImportList = Just (Ghc.Exactly, Ghc.L Ghc.importListAnn impList)
             }
-    importEpAnn = (Ghc.noAnn :: Ghc.EpAnn Ghc.EpAnnImportDecl)
+    importEpAnnQual = (Ghc.noAnn :: Ghc.EpAnn Ghc.EpAnnImportDecl)
 #if MIN_VERSION_ghc(9,12,0)
       { Ghc.anns = Ghc.noAnn
         { Ghc.importDeclAnnImport = Ghc.EpTok Ghc.noAnn
@@ -283,25 +283,20 @@ associateUnqualIds ids = M.toList . M.fromListWith (<>) $ do
 mkIE :: Bool -> (IdInfo, [IdInfo]) -> Ghc.LIE Ghc.GhcPs
 mkIE isFirstItem (parentId, children) = Ghc.L (ieLoc isFirstItem) $
   case children of
-    [] -> Ghc.IEVar Nothing (mkIEWrappedName True parentId) Nothing
-    _ -> Ghc.IEThingWith Ghc.ieThingWithAnn
+    [] -> Ghc.IEVar' Nothing (mkIEWrappedName True parentId)
+    _ -> Ghc.IEThingWith' Ghc.ieThingWithAnn
            (mkIEWrappedName True parentId)
            Ghc.NoIEWildcard
            (addCommas $ uncurry mkIEWrappedName <$> zip (True : repeat False) children)
-           Nothing
   where
   ieLoc isFirst = Ghc.noAnnSrcSpanDP' $ Ghc.SameLine (if isFirst then 0 else 1)
 
 mkIEWrappedName :: Bool -> IdInfo -> Ghc.LIEWrappedName Ghc.GhcPs
 mkIEWrappedName isFirst i =
-  Ghc.L ieLoc . Ghc.IEName Ghc.noExtField . Ghc.L (nameAnn $ idIsOp i)
+  Ghc.L ieLoc . Ghc.IEName Ghc.noExtField . Ghc.L (Ghc.nameAnn $ idIsOp i)
     . txtToRdrName $ idLabel i
   where
-    nameAnn :: Bool -> Ghc.EpAnn Ghc.NameAnn
-    nameAnn True = Ghc.operatorNameAnn
-    nameAnn False = Ghc.noAnn
     ieLoc = Ghc.noAnnSrcSpanDP' $ Ghc.SameLine (if isFirst then 0 else 1)
-
 
 addCommas :: [Ghc.GenLocated Ghc.SrcSpanAnnA e] -> [Ghc.GenLocated Ghc.SrcSpanAnnA e]
 addCommas [] = []
@@ -314,7 +309,7 @@ addIdsToExistingIEs
   -> (M.Map T.Text [UnqualIdentifier], [Ghc.LIE Ghc.GhcPs])
 addIdsToExistingIEs idsMap = foldr go (idsMap, [])
   where
-    go (Ghc.L ieLoc (Ghc.IEThingWith x name wc children Nothing))
+    go (Ghc.L ieLoc (Ghc.IEThingWith' x name wc children))
        (idMap, acc)
       | Ghc.IEName _ (Ghc.L _ rdrName) <- Ghc.unLoc name
       , let nameTxt = T.pack $ EP.rdrName2String rdrName
@@ -322,7 +317,7 @@ addIdsToExistingIEs idsMap = foldr go (idsMap, [])
       , let newChildren = addCommas $
               uncurry mkIEWrappedName . fmap toIdInfo <$>
               zip (null children : repeat False) ids
-            newLie = Ghc.L ieLoc (Ghc.IEThingWith x name wc (children ++ newChildren) Nothing)
+            newLie = Ghc.L ieLoc (Ghc.IEThingWith' x name wc (children ++ newChildren))
       = ( M.delete nameTxt idMap
         , newLie : acc
         )

@@ -3,7 +3,6 @@ module Main
   ) where
 
 import qualified Data.List as L
-import Data.Functor.Identity ((+++), Identity(runIdentity, foo), bar)
 
 -- import           Data.Functor.Identity (Identity(runIdentity), foo, bar)
 -- import Data.Functor.IdentityIdentityrunIdentity
@@ -11,5 +10,5 @@ import Data.Functor.Identity ((+++), Identity(runIdentity, foo), bar)
 -- test
 main :: IO ()
 main = do
-  runIdentity
+  L.sort
   foo +++ bar

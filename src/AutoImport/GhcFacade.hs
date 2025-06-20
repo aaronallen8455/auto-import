@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PatternSynonyms #-}
 module AutoImport.GhcFacade
   ( module Ghc
   , epAnnSrcSpan
@@ -9,7 +10,11 @@ module AutoImport.GhcFacade
   , nameParensAdornment
   , ieThingWithAnn
   , importListAnn
-  , operatorNameAnn
+  , nameAnn
+  , importEpAnn
+  , pattern IEThingWith'
+  , pattern IEVar'
+  , pattern TcRnSolverReport'
   ) where
 
 import           Control.Applicative ((<|>))
@@ -89,7 +94,14 @@ epAnnSrcSpan epAnn = do
 #endif
   Just srcSpan
 
-noAnnSrcSpanDP' :: Ghc.DeltaPos -> Ghc.SrcSpanAnnA --EpAnn ann
+noAnnSrcSpanDP'
+#if MIN_VERSION_ghc(9,10,0)
+  :: Ghc.NoAnn ann
+  => Ghc.DeltaPos -> Ghc.EpAnn ann
+#else
+  :: Monoid ann
+  => Ghc.DeltaPos -> Ghc.SrcSpanAnn' (Ghc.EpAnn ann)
+#endif
 noAnnSrcSpanDP'
 #if MIN_VERSION_ghc(9,10,0)
   = EP.noAnnSrcSpanDP
@@ -109,33 +121,60 @@ ieThingWithAnn :: Ghc.XIEThingWith Ghc.GhcPs
 ieThingWithAnn =
 #if MIN_VERSION_ghc(9,12,0)
   (Nothing, (Ghc.EpTok EP.d0, Ghc.noAnn, Ghc.noAnn, Ghc.EpTok EP.d0))
-#else
+#elif MIN_VERSION_ghc(9,10,0)
   (Nothing, [Ghc.AddEpAnn Ghc.AnnOpenP EP.d0, Ghc.AddEpAnn Ghc.AnnCloseP EP.d0])
+#else
+  ( Nothing
+  , Ghc.EpAnn (Ghc.Anchor Ghc.placeholderRealSpan EP.m0)
+      [Ghc.AddEpAnn Ghc.AnnOpenP EP.d0, Ghc.AddEpAnn Ghc.AnnCloseP EP.d0]
+      Ghc.emptyComments
+  )
 #endif
 
 #if MIN_VERSION_ghc(9,12,0)
 importListAnn :: Ghc.EpAnn (Ghc.AnnList (Ghc.EpToken "hiding", [Ghc.EpToken ","]))
-#else
+#elif MIN_VERSION_ghc(9,10,0)
 importListAnn :: Ghc.EpAnn Ghc.AnnList
+#else
+importListAnn :: Ghc.SrcSpanAnn' (Ghc.EpAnn Ghc.AnnList)
 #endif
 importListAnn =
-  (noAnnSrcSpanDP' $ Ghc.SameLine 0)
 #if MIN_VERSION_ghc(9,12,0)
+  (noAnnSrcSpanDP' $ Ghc.SameLine 0)
     { Ghc.anns = (Ghc.noAnn :: Ghc.AnnList (Ghc.EpToken "hiding", [Ghc.EpToken ","]))
       { Ghc.al_brackets = Ghc.ListParens (Ghc.EpTok EP.d1) (Ghc.EpTok EP.d0)
       , Ghc.al_rest = (Ghc.noAnn, [])
       }
     }
-#else
+#elif MIN_VERSION_ghc(9,10,0)
+  (noAnnSrcSpanDP' $ Ghc.SameLine 0)
     { Ghc.anns = (Ghc.noAnn :: Ghc.AnnList)
       { Ghc.al_open = Just $ Ghc.AddEpAnn Ghc.AnnOpenP EP.d1
       , Ghc.al_close = Just $ Ghc.AddEpAnn Ghc.AnnCloseP EP.d0
       }
     }
+#else
+  (noAnnSrcSpanDP' @Ghc.AnnList $ Ghc.SameLine 0)
+    { Ghc.ann = Ghc.EpAnn
+      { Ghc.anns = mempty
+        { Ghc.al_open = Just $ Ghc.AddEpAnn Ghc.AnnOpenP EP.d0
+        , Ghc.al_close = Just $ Ghc.AddEpAnn Ghc.AnnCloseP EP.d0
+        }
+      , Ghc.entry = Ghc.Anchor Ghc.placeholderRealSpan EP.m1
+      , Ghc.comments = Ghc.emptyComments
+      }
+    }
 #endif
 
-operatorNameAnn :: Ghc.EpAnn Ghc.NameAnn
-operatorNameAnn =
+nameAnn
+  :: Bool
+#if MIN_VERSION_ghc(9,10,0)
+  -> Ghc.EpAnn Ghc.NameAnn
+#else
+  -> Ghc.SrcSpanAnn' (Ghc.EpAnn Ghc.NameAnn)
+#endif
+nameAnn False = Ghc.noSrcSpanA
+nameAnn True =
 #if MIN_VERSION_ghc(9,12,0)
   (Ghc.noAnn :: Ghc.EpAnn Ghc.NameAnn)
     { Ghc.anns = Ghc.NameAnn
@@ -144,7 +183,7 @@ operatorNameAnn =
       , Ghc.nann_trailing  = []
       }
     }
-#else
+#elif MIN_VERSION_ghc(9,10,0)
   (Ghc.noAnn :: Ghc.EpAnn Ghc.NameAnn)
     { Ghc.anns = Ghc.NameAnn
       { Ghc.nann_adornment = nameParensAdornment
@@ -154,4 +193,59 @@ operatorNameAnn =
       , Ghc.nann_close = Ghc.noAnn
       }
     }
+#else
+  Ghc.SrcSpanAnn
+    { Ghc.ann = Ghc.EpAnn
+      { Ghc.anns = Ghc.NameAnn
+        { Ghc.nann_adornment = nameParensAdornment
+        , Ghc.nann_name = EP.d0
+        , Ghc.nann_trailing  = []
+        , Ghc.nann_open = EP.d0
+        , Ghc.nann_close = EP.d0
+        }
+      , Ghc.entry = Ghc.Anchor Ghc.placeholderRealSpan UnchangedAnchor
+      , Ghc.comments = Ghc.emptyComments
+      }
+    , Ghc.locA = Ghc.noSrcSpan
+    }
+#endif
+
+importEpAnn :: Ghc.EpAnn Ghc.EpAnnImportDecl
+#if MIN_VERSION_ghc(9,10,0)
+importEpAnn = Ghc.noAnn
+#else
+importEpAnn =
+  Ghc.EpAnn
+    { Ghc.entry = Ghc.Anchor Ghc.placeholderRealSpan EP.m0
+    , Ghc.anns = Ghc.EpAnnImportDecl
+        { Ghc.importDeclAnnImport = EP.d0
+        , Ghc.importDeclAnnPragma = Nothing
+        , Ghc.importDeclAnnSafe = Nothing
+        , Ghc.importDeclAnnQualified = Nothing
+        , Ghc.importDeclAnnPackage = Nothing
+        , Ghc.importDeclAnnAs = Nothing
+        }
+    , Ghc.comments = Ghc.emptyComments
+    }
+#endif
+
+pattern IEThingWith' :: XIEThingWith Ghc.GhcPs -> LIEWrappedName Ghc.GhcPs -> IEWildcard -> [LIEWrappedName Ghc.GhcPs] -> Ghc.IE Ghc.GhcPs
+#if MIN_VERSION_ghc(9,10,0)
+pattern IEThingWith' x name wc children = Ghc.IEThingWith x name wc children Nothing
+#else
+pattern IEThingWith' x name wc children = Ghc.IEThingWith x name wc children
+#endif
+
+pattern IEVar' :: XIEVar Ghc.GhcPs -> LIEWrappedName Ghc.GhcPs -> Ghc.IE Ghc.GhcPs
+#if MIN_VERSION_ghc(9,10,0)
+pattern IEVar' x name = Ghc.IEVar x name Nothing
+#else
+pattern IEVar' x name = Ghc.IEVar x name
+#endif
+
+pattern TcRnSolverReport' :: Ghc.SolverReportWithCtxt -> Ghc.TcRnMessage
+#if MIN_VERSION_ghc(9,10,0)
+pattern TcRnSolverReport' report <- Ghc.TcRnSolverReport report _
+#else
+pattern TcRnSolverReport' report <- Ghc.TcRnSolverReport report _ _
 #endif
