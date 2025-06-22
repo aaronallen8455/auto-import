@@ -3,8 +3,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 module AutoImport.GhcFacade
   ( module Ghc
-  , epAnnSrcSpan
-  , determineStartLine
   , ann'
   , noAnnSrcSpanDP'
   , nameParensAdornment
@@ -18,8 +16,6 @@ module AutoImport.GhcFacade
   , pattern TcRnSolverReport'
   , pattern IEThingAbs'
   ) where
-
-import           Control.Applicative ((<|>))
 
 import           GHC as Ghc
 import           GHC.Data.Bag as Ghc
@@ -59,42 +55,6 @@ ann' = id
 ann' :: Ghc.SrcSpanAnnA -> Ghc.EpAnn Ghc.AnnListItem
 ann' = Ghc.ann
 #endif
-
-#if MIN_VERSION_ghc(9,10,0)
-determineStartLine :: EpAnn ann -> Maybe Int
-#else
-determineStartLine :: Ghc.SrcSpanAnnA -> Maybe Int
-#endif
-determineStartLine epAnn = pred <$>
-    (min mCommentLine mElemLine <|> mElemLine)
-  where
-    mElemLine =
-      Ghc.srcSpanStartLine <$> Ghc.srcSpanToRealSrcSpan (Ghc.locA epAnn)
-#if MIN_VERSION_ghc(9,12,0)
-    getRSS = Ghc.epaLocationRealSrcSpan
-#else
-    getRSS = Ghc.anchor
-#endif
-    mCommentLine =
-      case ann' epAnn of
-        x@Ghc.EpAnn{} -> case Ghc.comments x of
-          Ghc.EpaComments (Ghc.L comLoc _ : _) ->
-            Just . Ghc.srcSpanStartLine $ getRSS comLoc
-          Ghc.EpaCommentsBalanced (Ghc.L comLoc _ : _) _ ->
-            Just . Ghc.srcSpanStartLine $ getRSS comLoc
-          _ -> Nothing
-#if !MIN_VERSION_ghc(9,10,0)
-        Ghc.EpAnnNotUsed -> Nothing
-#endif
-
-epAnnSrcSpan :: Ghc.EpAnn ann -> Maybe Ghc.RealSrcSpan
-epAnnSrcSpan epAnn = do
-#if MIN_VERSION_ghc(9,10,0)
-  Ghc.EpaSpan (Ghc.RealSrcSpan srcSpan _) <- Just $ Ghc.entry epAnn
-#else
-  Ghc.Anchor srcSpan _ <- Just $ Ghc.entry epAnn
-#endif
-  Just srcSpan
 
 noAnnSrcSpanDP'
 #if MIN_VERSION_ghc(9,10,0)

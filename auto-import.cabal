@@ -20,6 +20,7 @@ library
     import:           warnings
     exposed-modules:  AutoImport
                       AutoImport.GhcFacade
+                      AutoImport.Config
     -- other-modules:
     default-extensions: LambdaCase, OverloadedStrings
     build-depends:    base,
