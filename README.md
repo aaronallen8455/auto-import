@@ -67,6 +67,10 @@ defaultToZero :: Maybe Int -> Int
 defaultToZero = fromMaybe 0
 ```
 
+(Note: the above would actually need to be compiled twice because GHC does not
+emit the 'missing qualifier' and 'out of scope variable' errors together. The
+missing qualifier errors occur first.)
+
 The plugin works by intercepting GHC errors indicating that a qualifier or
 identifier is not defined, and if it matches a line from the config, then the
 corresponding import statement is inserted. Compilation is aborted when this
