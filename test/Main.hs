@@ -31,6 +31,7 @@ main = defaultMain $ testGroup "Tests"
     , testCase "17" $ runTest "Case17.hs"
     , testCase "18" $ runTest "Case18.hs"
     , testCase "19" $ runTest "Case19.hs"
+    , testCase "20" $ runTest "Case20.hs"
     ]
   ]
 

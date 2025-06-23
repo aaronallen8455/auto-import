@@ -92,3 +92,7 @@ executable Case19
     import: attrs
     main-is: Case19.hs
     other-modules: Ops
+
+executable Case20
+    import: attrs
+    main-is: Case20.hs

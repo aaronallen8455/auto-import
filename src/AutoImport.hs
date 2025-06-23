@@ -66,7 +66,7 @@ addHscHook hscEnv = hscEnv
                       (Ghc.TcRnMessageDetailed _
                         (Ghc.TcRnSolverReport' report )
                     ))
-                  | Ghc.ReportHoleError hole Ghc.OutOfScopeHole{}
+                  | Ghc.ReportHoleError hole _
                       <- Ghc.reportContent report
                   , Just unqualId <- M.lookup (T.pack . EP.rdrName2String $ Ghc.hole_occ hole) (unqualIdentifiers autoImportCfg)
                   -> Right $ MissingId unqualId

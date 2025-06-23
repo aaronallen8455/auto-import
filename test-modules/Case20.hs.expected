@@ -1,0 +1,6 @@
+module Case20 where
+
+import Control.Lens (_Just)
+
+main :: IO ()
+main = _Just

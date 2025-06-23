@@ -1,0 +1,4 @@
+module Case20 where
+
+main :: IO ()
+main = _Just
