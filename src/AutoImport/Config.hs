@@ -197,7 +197,7 @@ parseIdentifier moName = do
 
   where
     identP = do
-      fc <- Parse.letterChar
+      fc <- Parse.char '_' <|> Parse.letterChar
       rest <- Parse.many (Parse.satisfy (\c -> Char.isAlphaNum c || c `elem` ['_', '\'', '#']))
         Parse.<?> "identifier chars"
       pure (T.pack $ fc : rest, False)
