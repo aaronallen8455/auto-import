@@ -96,3 +96,7 @@ executable Case19
 executable Case20
     import: attrs
     main-is: Case20.hs
+
+executable Case21
+    import: attrs
+    main-is: Case21.hs

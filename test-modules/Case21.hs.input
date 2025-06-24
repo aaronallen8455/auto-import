@@ -1,0 +1,6 @@
+module Case21 where
+
+type X = () :<|> ()
+
+main :: IO ()
+main = pure ()

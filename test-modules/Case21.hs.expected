@@ -1,0 +1,8 @@
+module Case21 where
+
+import Servant.API ((:<|>)((:<|>)))
+
+type X = () :<|> ()
+
+main :: IO ()
+main = pure ()
