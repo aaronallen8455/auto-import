@@ -1,0 +1,8 @@
+module Case22 where
+
+import DK (Ty(Con))
+
+type X = Con
+
+main :: IO ()
+main = pure ()

@@ -13,6 +13,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import qualified GHC.LanguageExtensions as LangExt
 import qualified GHC.Paths as Paths
 import qualified Language.Haskell.GHC.ExactPrint as EP
 import qualified Language.Haskell.GHC.ExactPrint.Parsers as EP
@@ -51,35 +52,8 @@ addHscHook hscEnv = hscEnv
         let msgs = case eTcRes of
                      Left (Ghc.SourceError m) -> m
                      Right (_, m) -> m
-            mkMissingThingError msgEnv =
-              case Ghc.errMsgDiagnostic msgEnv of
-                Ghc.GhcTcRnMessage
-                    (Ghc.TcRnMessageWithInfo _
-                      (Ghc.TcRnMessageDetailed _
-                        (Ghc.TcRnNotInScope Ghc.NotInScope _ [Ghc.MissingModule missingMod] _))
-                    )
-                  | let modTxt = moduleNameToText missingMod
-                  , Just qualMod <- M.lookup modTxt (qualModules autoImportCfg)
-                  -> Right $ MissingModule qualMod
-                Ghc.GhcTcRnMessage
-                    (Ghc.TcRnMessageWithInfo _
-                      (Ghc.TcRnMessageDetailed _
-                        (Ghc.TcRnNotInScope Ghc.NotInScope rdrName [] _))
-                    )
-                  | Just unqualId <- M.lookup (T.pack $ EP.rdrName2String rdrName) (unqualIdentifiers autoImportCfg)
-                  -> Right $ MissingId unqualId
-                Ghc.GhcTcRnMessage
-                    (Ghc.TcRnMessageWithInfo _
-                      (Ghc.TcRnMessageDetailed _
-                        (Ghc.TcRnSolverReport' report )
-                    ))
-                  | Ghc.ReportHoleError hole _
-                      <- Ghc.reportContent report
-                  , Just unqualId <- M.lookup (T.pack . EP.rdrName2String $ Ghc.hole_occ hole) (unqualIdentifiers autoImportCfg)
-                  -> Right $ MissingId unqualId
-                _ -> Left msgEnv
-            (_otherDiags, missingThings) =
-              Ghc.partitionBagWith mkMissingThingError (Ghc.getMessages msgs)
+            missingThings =
+              Ghc.mapMaybeBag (missingThingFromMsg autoImportCfg) (Ghc.getMessages msgs)
         case NE.nonEmpty (nubOrd $ toList missingThings) of
           Just neMissing -> do
             -- Parse from file because the parse result from GHC lacks comments
@@ -103,6 +77,41 @@ data MissingThing
   = MissingModule QualMod
   | MissingId UnqualIdentifier
   deriving (Eq, Ord)
+
+missingThingFromMsg :: Config -> Ghc.MsgEnvelope Ghc.GhcMessage -> Maybe MissingThing
+missingThingFromMsg autoImportCfg msgEnv =
+  case Ghc.errMsgDiagnostic msgEnv of
+    Ghc.GhcTcRnMessage
+        (Ghc.TcRnMessageWithInfo _
+          (Ghc.TcRnMessageDetailed _
+            (Ghc.TcRnNotInScope Ghc.NotInScope _ [Ghc.MissingModule missingMod] _))
+        )
+      | let modTxt = moduleNameToText missingMod
+      , Just qualMod <- M.lookup modTxt (qualModules autoImportCfg)
+      -> Just $ MissingModule qualMod
+    Ghc.GhcTcRnMessage
+        (Ghc.TcRnMessageWithInfo _
+          (Ghc.TcRnMessageDetailed _
+            (Ghc.TcRnNotInScope Ghc.NotInScope rdrName [] hints))
+        )
+      | Just unqualId <- M.lookup (T.pack $ EP.rdrName2String rdrName) (unqualIdentifiers autoImportCfg)
+      , let isDataKindExtHint = \case
+              Ghc.SuggestExtension (Ghc.SuggestSingleExtension _ LangExt.DataKinds) -> True
+              _ -> False
+        -- If -XDataKinds is suggested, that means the import already exists
+        -- and should not be added again.
+      , not (any isDataKindExtHint hints)
+      -> Just $ MissingId unqualId
+    Ghc.GhcTcRnMessage
+        (Ghc.TcRnMessageWithInfo _
+          (Ghc.TcRnMessageDetailed _
+            (Ghc.TcRnSolverReport' report )
+        ))
+      | Ghc.ReportHoleError hole _
+          <- Ghc.reportContent report
+      , Just unqualId <- M.lookup (T.pack . EP.rdrName2String $ Ghc.hole_occ hole) (unqualIdentifiers autoImportCfg)
+      -> Just $ MissingId unqualId
+    _ -> Nothing
 
 -- | Diagnostic thrown when import statements are inserted
 data ImportsAddedDiag = ImportsAddedDiag

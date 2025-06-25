@@ -25,14 +25,15 @@ library
     default-extensions: LambdaCase, OverloadedStrings
     build-depends:    base,
                       ghc >= 9.6 && < 9.13,
+                      ghc-boot,
+                      ghc-exactprint,
+                      ghc-paths,
                       bytestring,
                       megaparsec >= 9 && < 10,
                       text,
                       containers,
                       directory,
-                      time,
-                      ghc-exactprint,
-                      ghc-paths
+                      time
     hs-source-dirs:   src
     default-language: GHC2021
 
