@@ -17,6 +17,7 @@ import           Control.Exception (throw)
 import           Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Char as Char
+import           Data.Functor (void)
 import           Data.IORef
 import qualified Data.Map.Strict as M
 import           Data.Maybe (fromMaybe)
@@ -138,20 +139,21 @@ parseConfig fileName content =
 parseConfigEntry :: Parse.Parsec Void T.Text Config
 parseConfigEntry = do
   moName <- parseModName
+  Parse.hspace
   config <-
-    Parse.try ((\ids -> mempty
+    ((\ids -> mempty
       {unqualIdentifiers = M.fromList $ (\i -> (identifier i, i)) <$> ids}
-         ) <$> parseUnqualIds moName)
+       ) <$> parseUnqualIds moName)
     <|> ((\qualMod -> mempty
       {qualModules = M.singleton (fromMaybe (modName qualMod) (modQual qualMod)) qualMod}
        ) <$> parseQualMod moName)
-  _ <- Parse.hspace <* Parse.optional Parse.eol
+  _ <- Parse.hspace <* (void Parse.eol <|> Parse.eof)
   pure config
 
 parseQualMod :: T.Text -> Parse.Parsec Void T.Text QualMod
 parseQualMod moName = do
   mQual <- Parse.optional . Parse.try $ do
-    Parse.hspace1 *> Parse.string "as" *> Parse.hspace1
+    Parse.string "as" *> Parse.hspace1
     parseModName
   pure $ QualMod moName mQual
 
@@ -165,8 +167,7 @@ parseModName = T.intercalate "." <$> Parse.sepBy1 parseSegment (Parse.char '.')
       pure . T.pack $ h : rest
 
 parseUnqualIds :: T.Text -> Parse.Parsec Void T.Text [UnqualIdentifier]
-parseUnqualIds moName = concat <$> do
-  Parse.hspace
+parseUnqualIds moName = concat <$>
   Parse.between (Parse.char '(' <* Parse.hspace) (Parse.char ')' <* Parse.hspace)
     (Parse.sepBy1 (parseIdentifier moName) (Parse.char ',' <* Parse.hspace))
 
