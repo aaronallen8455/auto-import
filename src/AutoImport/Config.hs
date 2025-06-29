@@ -13,6 +13,7 @@ module AutoImport.Config
   ) where
 
 import           Control.Applicative ((<|>))
+import           Control.Monad (guard)
 import           Control.Exception (throw)
 import           Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BS8
@@ -139,23 +140,35 @@ parseConfig fileName content =
 parseConfigEntry :: Parse.Parsec Void T.Text Config
 parseConfigEntry = do
   moName <- parseModName
-  Parse.hspace
+
+  let parseUnqualIdsEntry =
+        (\ids -> mempty
+          {unqualIdentifiers = M.fromList $ (\i -> (identifier i, i)) <$> ids}
+        ) <$> parseUnqualIds moName
+      parseQualModEntry =
+        (\qualMod -> mempty
+          {qualModules = M.singleton (fromMaybe (modName qualMod) (modQual qualMod)) qualMod}
+        ) <$> parseModQual moName
+      selfQualMod = pure mempty
+          { qualModules = M.singleton moName (QualMod moName Nothing)}
+
   config <-
-    ((\ids -> mempty
-      {unqualIdentifiers = M.fromList $ (\i -> (identifier i, i)) <$> ids}
-       ) <$> parseUnqualIds moName)
-    <|> ((\qualMod -> mempty
-      {qualModules = M.singleton (fromMaybe (modName qualMod) (modQual qualMod)) qualMod}
-       ) <$> parseQualMod moName)
-  _ <- Parse.hspace <* (void Parse.eol <|> Parse.eof)
+    ( do
+      Parse.try hspaceOrIndent
+      parseUnqualIdsEntry <|> parseQualModEntry
+    ) <|> selfQualMod
+
+  _ <- void (Parse.some (Parse.hspace *> Parse.eol))
+       <|> Parse.eof
+
   pure config
 
-parseQualMod :: T.Text -> Parse.Parsec Void T.Text QualMod
-parseQualMod moName = do
-  mQual <- Parse.optional . Parse.try $ do
+parseModQual :: T.Text -> Parse.Parsec Void T.Text QualMod
+parseModQual moName = do
+  qual <- do
     Parse.string "as" *> Parse.hspace1
     parseModName
-  pure $ QualMod moName mQual
+  pure $ QualMod moName (Just qual)
 
 parseModName :: Parse.Parsec Void T.Text T.Text
 parseModName = T.intercalate "." <$> Parse.sepBy1 parseSegment (Parse.char '.')
@@ -168,8 +181,8 @@ parseModName = T.intercalate "." <$> Parse.sepBy1 parseSegment (Parse.char '.')
 
 parseUnqualIds :: T.Text -> Parse.Parsec Void T.Text [UnqualIdentifier]
 parseUnqualIds moName = concat <$>
-  Parse.between (Parse.char '(' <* Parse.hspace) (Parse.char ')' <* Parse.hspace)
-    (Parse.sepBy1 (parseIdentifier moName) (Parse.char ',' <* Parse.hspace))
+  Parse.between (Parse.char '(' <* hspaceOrIndent) (Parse.char ')')
+    (Parse.sepBy1 (parseIdentifier moName <* hspaceOrIndent) (Parse.char ',' <* hspaceOrIndent))
 
 parseIdentifier :: T.Text -> Parse.Parsec Void T.Text [UnqualIdentifier]
 parseIdentifier moName = do
@@ -183,7 +196,7 @@ parseIdentifier moName = do
         }
   if parentIsOp || T.all Char.isUpper (T.take 1 parent)
   then do
-    Parse.hspace
+    hspaceOrIndent
     mChildIds <- Parse.optional childIdsP
     case mChildIds of
       Nothing -> pure [ parentId ]
@@ -203,11 +216,21 @@ parseIdentifier moName = do
         Parse.<?> "identifier chars"
       pure (T.pack $ fc : rest, False)
     operatorP = (, True) . T.pack <$>
-      Parse.between (Parse.char '(' <* Parse.hspace) (Parse.char ')' <* Parse.hspace)
+      Parse.between (Parse.char '(' <* Parse.hspace) (Parse.hspace *> Parse.char ')')
         (Parse.some (Parse.oneOf (":!#$%&*+./<=>?@\\^|-~" :: String) Parse.<?> "operator char"))
     childIdsP =
-      Parse.between (Parse.char '(' <* Parse.hspace) (Parse.char ')' <* Parse.hspace) $
-        Parse.sepBy1 (identP <|> operatorP) (Parse.char ',' <* Parse.hspace)
+      Parse.between (Parse.char '(' <* hspaceOrIndent) (Parse.char ')') $
+        Parse.sepBy1 (identP <|> operatorP <* hspaceOrIndent)
+                     (Parse.char ',' <* hspaceOrIndent)
+
+-- | Parse any amount of whitespace not ending in a newline
+hspaceOrIndent :: Parse.Parsec Void T.Text ()
+hspaceOrIndent = do
+  Parse.hspace
+  (do void Parse.eol
+      s : _ <- reverse <$> Parse.some Parse.spaceChar
+      guard (s /= '\n')
+    ) <|> pure ()
 
 -- | Diagnostic thrown when config parsing fails
 newtype ConfigParseFailDiag = ConfigParseFailDiag String
