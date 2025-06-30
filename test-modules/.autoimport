@@ -1,6 +1,7 @@
 Data.Text.IO as TIO
 Data.List
-Control.Lens (_Just)
+-- comment
+Control.Lens (_Just) -- comment
 Foo
   ( Foo(f1, b2)
   , Bar

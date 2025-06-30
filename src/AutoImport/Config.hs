@@ -31,6 +31,7 @@ import qualified System.Directory as Dir
 import           System.IO.Unsafe (unsafePerformIO)
 import qualified Text.Megaparsec as Parse
 import qualified Text.Megaparsec.Char as Parse
+import qualified Text.Megaparsec.Char.Lexer as Parse (skipLineComment)
 
 import qualified AutoImport.GhcFacade as Ghc
 
@@ -134,8 +135,12 @@ parseConfig fileName content =
     first Parse.errorBundlePretty $ Parse.runParser parser fileName content
   where
     parser = do
+      _ <- Parse.optional skipSpaceNoIndent
       mconcat
-        <$> (Parse.many parseConfigEntry <* Parse.space <* Parse.eof)
+        <$> (Parse.many p <* Parse.space <* Parse.eof)
+    p = ((parseConfigEntry <* Parse.optional parseLineComment)
+          <|> (mempty <$ parseLineComment))
+        <* skipSpaceNoIndent
 
 parseConfigEntry :: Parse.Parsec Void T.Text Config
 parseConfigEntry = do
@@ -152,16 +157,10 @@ parseConfigEntry = do
       selfQualMod = pure mempty
           { qualModules = M.singleton moName (QualMod moName Nothing)}
 
-  config <-
-    ( do
-      Parse.try hspaceOrIndent
-      parseUnqualIdsEntry <|> parseQualModEntry
+  ( do
+    Parse.try hspaceOrIndent
+    parseUnqualIdsEntry <|> parseQualModEntry
     ) <|> selfQualMod
-
-  _ <- void (Parse.some (Parse.hspace *> Parse.eol))
-       <|> Parse.eof
-
-  pure config
 
 parseModQual :: T.Text -> Parse.Parsec Void T.Text QualMod
 parseModQual moName = do
@@ -222,6 +221,17 @@ parseIdentifier moName = do
       Parse.between (Parse.char '(' <* hspaceOrIndent) (Parse.char ')') $
         Parse.sepBy1 (identP <|> operatorP <* hspaceOrIndent)
                      (Parse.char ',' <* hspaceOrIndent)
+
+parseLineComment :: Parse.Parsec Void T.Text ()
+parseLineComment = do
+  Parse.hspace
+  Parse.skipLineComment "--"
+
+-- Skip horizontal and vertical space until unindented text is found
+skipSpaceNoIndent :: Parse.Parsec Void T.Text ()
+skipSpaceNoIndent =
+  void (Parse.some (Parse.hspace *> Parse.eol))
+    <|> Parse.eof
 
 -- | Parse any amount of whitespace not ending in a newline
 hspaceOrIndent :: Parse.Parsec Void T.Text ()
