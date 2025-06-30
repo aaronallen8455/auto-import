@@ -75,14 +75,15 @@ localConfigFile, homeConfigFile :: FilePath
 localConfigFile = "./.autoimport"
 homeConfigFile = "~/.autoimport"
 
-resolveConfig :: IO Config
-resolveConfig = do
+resolveConfig :: Maybe FilePath -> IO Config
+resolveConfig mLocalConfigFileOverride = do
   mCached <- readIORef configCacheRef
+  let localFile = fromMaybe localConfigFile mLocalConfigFileOverride
   case mCached of
     Just configCache -> do
       mLocalModTime <-
-        Dir.doesFileExist localConfigFile >>= \case
-          True -> Just <$> Dir.getModificationTime localConfigFile
+        Dir.doesFileExist localFile >>= \case
+          True -> Just <$> Dir.getModificationTime localFile
           False -> pure Nothing
       mHomeModTime <-
         Dir.doesFileExist homeConfigFile >>= \case
@@ -90,14 +91,14 @@ resolveConfig = do
           False -> pure Nothing
       if mLocalModTime /= localModTime configCache
          || mHomeModTime /= homeModTime configCache
-      then readAndCacheConfig
+      then readAndCacheConfig localFile
       else pure $ cachedConfig configCache
-    Nothing -> readAndCacheConfig
+    Nothing -> readAndCacheConfig localFile
 
-readAndCacheConfig :: IO Config
-readAndCacheConfig = do
+readAndCacheConfig :: FilePath -> IO Config
+readAndCacheConfig localFile = do
   mHomeCfg <- readConfigFile homeConfigFile
-  mLocalCfg <- readConfigFile localConfigFile
+  mLocalCfg <- readConfigFile localFile
   case (fst <$> mLocalCfg) <> (fst <$> mHomeCfg) of
     Nothing -> do
       BS8.putStrLn "'.autoimport' file not found by auto-import plugin"

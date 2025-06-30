@@ -8,10 +8,11 @@ This plugin is intended to be used with GHCi or adjacent utilities such as
 `ghcid` and `ghciwatch` as a developement tool, not as a package dependency.
 
 You must first define a config file that specifies which modules are eligible
-to be automatically imported. This file must be named `.autoimport` and can be
-placed in the home directory and/or in the root directory of your Haskell
-project. If the file is found in both locations, the configs will be merged
-with the local file taking precedence.
+to be automatically imported. By default this file is named `.autoimport` and
+can be placed in the home directory and/or in the root directory of your
+Haskell project. If the file is found in both locations, the configs will be
+merged with the local file taking precedence. The local file path can be overriden
+by passing this plugin option to GHC: `fplugin-opt=AutoImport:--cfg=path/to/file`.
 
 Here is an example `.autoimport` file:
 

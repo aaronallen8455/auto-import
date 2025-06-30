@@ -28,12 +28,12 @@ import qualified AutoImport.GhcFacade as Ghc
 
 plugin :: Ghc.Plugin
 plugin = Ghc.defaultPlugin
-  { Ghc.driverPlugin = \_ hscEnv -> pure $ addHscHook hscEnv
+  { Ghc.driverPlugin = \args hscEnv -> pure $ addHscHook args hscEnv
   , Ghc.pluginRecompile = Ghc.purePlugin
   }
 
-addHscHook :: Ghc.HscEnv -> Ghc.HscEnv
-addHscHook hscEnv = hscEnv
+addHscHook :: [Ghc.CommandLineOption] -> Ghc.HscEnv -> Ghc.HscEnv
+addHscHook args hscEnv = hscEnv
   { Ghc.hsc_hooks =
       let hooks = Ghc.hsc_hooks hscEnv
        in hooks
@@ -48,7 +48,7 @@ addHscHook hscEnv = hscEnv
                 (Ghc.mkGeneralSrcSpan $ Ghc.mkFastString modFile)
                 (Ghc.ghcUnknownMessage ImportsAddedDiag)
         eTcRes <- try $ runPhaseOrExistingHook phase
-        autoImportCfg <- resolveConfig
+        autoImportCfg <- resolveConfig (asum $ parseConfigPathArg <$> args)
         let msgs = case eTcRes of
                      Left (Ghc.SourceError m) -> m
                      Right (_, m) -> m
@@ -69,6 +69,10 @@ addHscHook hscEnv = hscEnv
       where
       runPhaseOrExistingHook :: Ghc.TPhase res -> IO res
       runPhaseOrExistingHook = maybe Ghc.runPhase (\(Ghc.PhaseHook h) -> h) mExistingHook
+
+parseConfigPathArg :: Ghc.CommandLineOption -> Maybe FilePath
+parseConfigPathArg ('-':'-':'c':'f':'g':'=':path) = Just path
+parseConfigPathArg _ = Nothing
 
 moduleNameToText :: Ghc.ModuleName -> T.Text
 moduleNameToText = TE.decodeUtf8 . Ghc.bytesFS . Ghc.moduleNameFS
