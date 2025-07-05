@@ -9,6 +9,7 @@ module AutoImport.Config
   , UnqualIdentifiers
   , UnqualIdentifier(..)
   , IdInfo(..)
+  , Namespace(..)
   , resolveConfig
   ) where
 
@@ -64,11 +65,18 @@ data UnqualIdentifier = UnqualIdentifier
   , identifier :: T.Text
   , parentTy :: Maybe IdInfo
   , isOperator :: Bool
+  , namespace :: Maybe Namespace
   } deriving (Show, Eq, Ord)
+
+data Namespace
+  = PatternNS
+  | TypeNS
+  deriving (Show, Eq, Ord)
 
 data IdInfo = IdInfo
   { idLabel :: T.Text
   , idIsOp :: Bool
+  , idNamespace :: Maybe Namespace
   } deriving (Show, Eq, Ord)
 
 localConfigFile, homeConfigFile :: FilePath
@@ -186,6 +194,8 @@ parseUnqualIds moName = concat <$>
 
 parseIdentifier :: T.Text -> Parse.Parsec Void T.Text [UnqualIdentifier]
 parseIdentifier moName = do
+  mNamespace <- Parse.try . Parse.optional $
+    (patternP <|> typeP) <* Parse.hspace1
   (parent, parentIsOp) <- identP <|> operatorP
   let parentId =
         UnqualIdentifier
@@ -193,6 +203,7 @@ parseIdentifier moName = do
         , identifier = parent
         , parentTy = Nothing
         , isOperator = parentIsOp
+        , namespace = mNamespace
         }
   if parentIsOp || T.all Char.isUpper (T.take 1 parent)
   then do
@@ -204,8 +215,9 @@ parseIdentifier moName = do
         (\(cid, isOp) -> UnqualIdentifier
           { importByMod = moName
           , identifier = cid
-          , parentTy = Just (IdInfo parent parentIsOp)
+          , parentTy = Just (IdInfo parent parentIsOp mNamespace)
           , isOperator = isOp
+          , namespace = Nothing
           }) <$> childIds
   else pure [ parentId ]
 
@@ -222,6 +234,8 @@ parseIdentifier moName = do
       Parse.between (Parse.char '(' <* hspaceOrIndent) (Parse.char ')') $
         Parse.sepBy1 (identP <|> operatorP <* hspaceOrIndent)
                      (Parse.char ',' <* hspaceOrIndent)
+    patternP = PatternNS <$ Parse.string "pattern"
+    typeP = TypeNS <$ Parse.string "type"
 
 parseLineComment :: Parse.Parsec Void T.Text ()
 parseLineComment = do

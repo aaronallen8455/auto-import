@@ -265,8 +265,8 @@ associateUnqualIds :: [UnqualIdentifier] -> [(IdInfo, [IdInfo])]
 associateUnqualIds ids = M.toList . M.fromListWith (<>) $ do
   i <- ids
   case parentTy i of
-    Nothing -> [(IdInfo (identifier i) (isOperator i), [])]
-    Just pt -> [(pt, [IdInfo (identifier i) (isOperator i)])]
+    Nothing -> [(toIdInfo i, [])]
+    Just pt -> [(pt, [toIdInfo i])]
 
 mkIE :: Bool -> (IdInfo, [IdInfo]) -> Ghc.LIE Ghc.GhcPs
 mkIE isFirstItem (parentId, children) = Ghc.L (ieLoc isFirstItem) $
@@ -281,10 +281,13 @@ mkIE isFirstItem (parentId, children) = Ghc.L (ieLoc isFirstItem) $
 
 mkIEWrappedName :: Bool -> IdInfo -> Ghc.LIEWrappedName Ghc.GhcPs
 mkIEWrappedName isFirst i =
-  Ghc.L ieLoc . Ghc.IEName Ghc.noExtField . Ghc.L (Ghc.nameAnn $ idIsOp i)
-    . txtToRdrName $ idLabel i
+  Ghc.L ieLoc . ieCon . txtToRdrName $ idLabel i
   where
     ieLoc = Ghc.noAnnSrcSpanDP' $ Ghc.SameLine (if isFirst then 0 else 1)
+    ieCon = case idNamespace i of
+              Just PatternNS -> Ghc.IEPattern Ghc.epTokD0 . Ghc.L (Ghc.nameAnn (idIsOp i) True)
+              Just TypeNS -> Ghc.IEType Ghc.epTokD0 . Ghc.L (Ghc.nameAnn (idIsOp i) True)
+              Nothing -> Ghc.IEName Ghc.noExtField . Ghc.L (Ghc.nameAnn (idIsOp i) False)
 
 addCommas :: [Ghc.GenLocated Ghc.SrcSpanAnnA e] -> [Ghc.GenLocated Ghc.SrcSpanAnnA e]
 addCommas [] = []
@@ -327,4 +330,5 @@ toIdInfo :: UnqualIdentifier -> IdInfo
 toIdInfo i = IdInfo
   { idLabel = identifier i
   , idIsOp = isOperator i
+  , idNamespace = namespace i
   }

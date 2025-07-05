@@ -11,3 +11,4 @@ Ops ((+++), (:::)(a, (***)))
 Servant.API ((:<|>)((:<|>)))
 
 DK (Ty(Con))
+Namespace (pattern P, type T, type (:+:))

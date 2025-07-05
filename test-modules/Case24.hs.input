@@ -1,0 +1,4 @@
+module Case24 where
+
+main :: IO ()
+main = P

@@ -1,0 +1,6 @@
+module Case24 where
+
+import Namespace (pattern P)
+
+main :: IO ()
+main = P

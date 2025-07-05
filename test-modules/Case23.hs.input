@@ -1,0 +1,4 @@
+module Case23 where
+
+main :: T :+: T
+main = pure ()

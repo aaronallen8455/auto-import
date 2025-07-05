@@ -105,3 +105,11 @@ executable Case22
     import: attrs
     main-is: Case22.hs
     other-modules: DK
+
+executable Case23
+    import: attrs
+    main-is: Case23.hs
+
+executable Case24
+    import: attrs
+    main-is: Case24.hs

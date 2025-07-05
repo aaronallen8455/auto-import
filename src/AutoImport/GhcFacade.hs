@@ -11,6 +11,7 @@ module AutoImport.GhcFacade
   , nameAnn
   , importEpAnn
   , hasTrailingComma
+  , epTokD0
   , pattern IEThingWith'
   , pattern IEVar'
   , pattern TcRnSolverReport'
@@ -134,42 +135,49 @@ importListAnn =
 
 nameAnn
   :: Bool
+  -> Bool
 #if MIN_VERSION_ghc(9,10,0)
   -> Ghc.EpAnn Ghc.NameAnn
 #else
   -> Ghc.SrcSpanAnn' (Ghc.EpAnn Ghc.NameAnn)
 #endif
-nameAnn False = Ghc.noSrcSpanA
-nameAnn True =
+nameAnn needsParens addLeftSpace =
 #if MIN_VERSION_ghc(9,12,0)
   (Ghc.noAnn :: Ghc.EpAnn Ghc.NameAnn)
     { Ghc.anns = Ghc.NameAnn
-      { Ghc.nann_adornment = nameParensAdornment
-      , Ghc.nann_name = Ghc.noAnn
+      { Ghc.nann_adornment = if needsParens then nameParensAdornment else Ghc.NameNoAdornment
+      , Ghc.nann_name = EP.d0
       , Ghc.nann_trailing  = []
       }
+    , Ghc.entry = if addLeftSpace then EP.d1 else EP.d0
     }
 #elif MIN_VERSION_ghc(9,10,0)
   (Ghc.noAnn :: Ghc.EpAnn Ghc.NameAnn)
-    { Ghc.anns = Ghc.NameAnn
-      { Ghc.nann_adornment = nameParensAdornment
-      , Ghc.nann_name = Ghc.noAnn
-      , Ghc.nann_trailing  = []
-      , Ghc.nann_open = Ghc.noAnn
-      , Ghc.nann_close = Ghc.noAnn
-      }
+    { Ghc.anns = if needsParens
+      then Ghc.NameAnn
+        { Ghc.nann_adornment = nameParensAdornment
+        , Ghc.nann_name = EP.d0
+        , Ghc.nann_trailing  = []
+        , Ghc.nann_open = Ghc.noAnn
+        , Ghc.nann_close = Ghc.noAnn
+        }
+      else Ghc.noAnn
+    , Ghc.entry = if addLeftSpace then EP.d1 else EP.d0
     }
 #else
   Ghc.SrcSpanAnn
     { Ghc.ann = Ghc.EpAnn
-      { Ghc.anns = Ghc.NameAnn
-        { Ghc.nann_adornment = nameParensAdornment
-        , Ghc.nann_name = EP.d0
-        , Ghc.nann_trailing  = []
-        , Ghc.nann_open = EP.d0
-        , Ghc.nann_close = EP.d0
-        }
-      , Ghc.entry = Ghc.Anchor Ghc.placeholderRealSpan UnchangedAnchor
+      { Ghc.anns = if needsParens
+        then Ghc.NameAnn
+          { Ghc.nann_adornment = nameParensAdornment
+          , Ghc.nann_name = EP.d0
+          , Ghc.nann_trailing  = []
+          , Ghc.nann_open = EP.d0
+          , Ghc.nann_close = EP.d0
+          }
+        else mempty
+      , Ghc.entry = Ghc.Anchor Ghc.placeholderRealSpan $
+          if addLeftSpace then EP.m1 else EP.m0
       , Ghc.comments = Ghc.emptyComments
       }
     , Ghc.locA = Ghc.noSrcSpan
@@ -198,6 +206,14 @@ importEpAnn =
         }
     , Ghc.comments = Ghc.emptyComments
     }
+#endif
+
+#if MIN_VERSION_ghc(9,12,0)
+epTokD0 :: Ghc.EpToken tok
+epTokD0 = Ghc.EpTok EP.d0
+#else
+epTokD0 :: Ghc.EpaLocation
+epTokD0 = EP.d0
 #endif
 
 hasTrailingComma :: SrcSpanAnnA -> Bool

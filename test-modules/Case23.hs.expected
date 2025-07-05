@@ -1,0 +1,6 @@
+module Case23 where
+
+import Namespace (type (:+:), type T)
+
+main :: T :+: T
+main = pure ()

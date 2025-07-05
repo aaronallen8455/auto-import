@@ -1,2 +1,1 @@
-support pattern imports
-support 'type' imports
+multiples of the same qualifier should add all import statements
