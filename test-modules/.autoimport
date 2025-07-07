@@ -12,3 +12,5 @@ Servant.API ((:<|>)((:<|>)))
 
 DK (Ty(Con))
 Namespace (pattern P, type T, type (:+:))
+M1 as Both
+M2 as Both

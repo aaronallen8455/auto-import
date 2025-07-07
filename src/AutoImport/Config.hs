@@ -10,6 +10,7 @@ module AutoImport.Config
   , UnqualIdentifier(..)
   , IdInfo(..)
   , Namespace(..)
+  , MonoidMap(..)
   , resolveConfig
   ) where
 
@@ -53,7 +54,14 @@ data Config = Config
   } deriving (Generic, Show)
     deriving (Semigroup, Monoid) via Generically Config
 
-type QualMods = M.Map T.Text QualMod
+newtype MonoidMap k a = MonoidMap {unMonoidMap :: M.Map k a}
+  deriving (Show)
+instance (Ord k, Semigroup a) => Semigroup (MonoidMap k a) where
+  MonoidMap a <> MonoidMap b = MonoidMap $ M.unionWith (<>) a b
+instance (Ord k, Monoid a) => Monoid (MonoidMap k a) where
+  mempty = MonoidMap mempty
+
+type QualMods = MonoidMap T.Text [QualMod]
 data QualMod = QualMod
   { modName :: T.Text
   , modQual :: Maybe T.Text
@@ -161,10 +169,13 @@ parseConfigEntry = do
         ) <$> parseUnqualIds moName
       parseQualModEntry =
         (\qualMod -> mempty
-          {qualModules = M.singleton (fromMaybe (modName qualMod) (modQual qualMod)) qualMod}
-        ) <$> parseModQual moName
+          {qualModules = MonoidMap $
+            M.singleton (fromMaybe (modName qualMod) (modQual qualMod)) [qualMod]
+          }) <$> parseModQual moName
       selfQualMod = pure mempty
-          { qualModules = M.singleton moName (QualMod moName Nothing)}
+          {qualModules = MonoidMap $
+            M.singleton moName [QualMod moName Nothing]
+          }
 
   ( do
     Parse.try hspaceOrIndent

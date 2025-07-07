@@ -53,7 +53,7 @@ addHscHook args hscEnv = hscEnv
                      Left (Ghc.SourceError m) -> m
                      Right (_, m) -> m
             missingThings =
-              Ghc.mapMaybeBag (missingThingFromMsg autoImportCfg) (Ghc.getMessages msgs)
+              foldMap (missingThingFromMsg autoImportCfg) (Ghc.getMessages msgs)
         case NE.nonEmpty (nubOrd $ toList missingThings) of
           Just neMissing -> do
             -- Parse from file because the parse result from GHC lacks comments
@@ -82,7 +82,7 @@ data MissingThing
   | MissingId UnqualIdentifier
   deriving (Eq, Ord)
 
-missingThingFromMsg :: Config -> Ghc.MsgEnvelope Ghc.GhcMessage -> Maybe MissingThing
+missingThingFromMsg :: Config -> Ghc.MsgEnvelope Ghc.GhcMessage -> [MissingThing]
 missingThingFromMsg autoImportCfg msgEnv =
   case Ghc.errMsgDiagnostic msgEnv of
     Ghc.GhcTcRnMessage
@@ -91,8 +91,8 @@ missingThingFromMsg autoImportCfg msgEnv =
             (Ghc.TcRnNotInScope Ghc.NotInScope _ [Ghc.MissingModule missingMod] _))
         )
       | let modTxt = moduleNameToText missingMod
-      , Just qualMod <- M.lookup modTxt (qualModules autoImportCfg)
-      -> Just $ MissingModule qualMod
+      , Just qualMods <- M.lookup modTxt (unMonoidMap $ qualModules autoImportCfg)
+      -> MissingModule <$> qualMods
     Ghc.GhcTcRnMessage
         (Ghc.TcRnMessageWithInfo _
           (Ghc.TcRnMessageDetailed _
@@ -105,7 +105,7 @@ missingThingFromMsg autoImportCfg msgEnv =
         -- If -XDataKinds is suggested, that means the import already exists
         -- and should not be added again.
       , not (any isDataKindExtHint hints)
-      -> Just $ MissingId unqualId
+      -> [MissingId unqualId]
     Ghc.GhcTcRnMessage
         (Ghc.TcRnMessageWithInfo _
           (Ghc.TcRnMessageDetailed _
@@ -114,8 +114,8 @@ missingThingFromMsg autoImportCfg msgEnv =
       | Ghc.ReportHoleError hole _
           <- Ghc.reportContent report
       , Just unqualId <- M.lookup (T.pack . EP.rdrName2String $ Ghc.hole_occ hole) (unqualIdentifiers autoImportCfg)
-      -> Just $ MissingId unqualId
-    _ -> Nothing
+      -> [MissingId unqualId]
+    _ -> []
 
 -- | Diagnostic thrown when import statements are inserted
 data ImportsAddedDiag = ImportsAddedDiag

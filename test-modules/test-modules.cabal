@@ -113,3 +113,7 @@ executable Case23
 executable Case24
     import: attrs
     main-is: Case24.hs
+
+executable Case25
+    import: attrs
+    main-is: Case25.hs

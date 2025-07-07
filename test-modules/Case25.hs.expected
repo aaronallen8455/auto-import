@@ -1,0 +1,7 @@
+module Case25 where
+
+import qualified M1 as Both
+import qualified M2 as Both
+
+main :: IO ()
+main = Both.a

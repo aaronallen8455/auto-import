@@ -1,0 +1,4 @@
+module Case25 where
+
+main :: IO ()
+main = Both.a
