@@ -12,7 +12,7 @@ to be automatically imported. By default this file is named `.autoimport` and
 can be placed in the home directory and/or in the root directory of your
 Haskell project. If the file is found in both locations, the configs will be
 merged with the local file taking precedence. The local file path can be overriden
-by passing this plugin option to GHC: `fplugin-opt=AutoImport:--cfg=path/to/file`.
+by passing this plugin option to GHC: `fplugin-opt=AutoImport:--import-cfg=path/to/file`.
 
 Here is an example `.autoimport` file:
 

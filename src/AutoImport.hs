@@ -71,7 +71,7 @@ addHscHook args hscEnv = hscEnv
       runPhaseOrExistingHook = maybe Ghc.runPhase (\(Ghc.PhaseHook h) -> h) mExistingHook
 
 parseConfigPathArg :: Ghc.CommandLineOption -> Maybe FilePath
-parseConfigPathArg ('-':'-':'c':'f':'g':'=':path) = Just path
+parseConfigPathArg ('-':'-':'i':'m':'p':'o':'r':'t':'-':'c':'f':'g':'=':path) = Just path
 parseConfigPathArg _ = Nothing
 
 moduleNameToText :: Ghc.ModuleName -> T.Text
