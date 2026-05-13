@@ -85,19 +85,11 @@ data MissingThing
 missingThingFromMsg :: Config -> Ghc.MsgEnvelope Ghc.GhcMessage -> [MissingThing]
 missingThingFromMsg autoImportCfg msgEnv =
   case Ghc.errMsgDiagnostic msgEnv of
-    Ghc.GhcTcRnMessage
-        (Ghc.TcRnMessageWithInfo _
-          (Ghc.TcRnMessageDetailed _
-            (Ghc.TcRnNotInScope Ghc.NotInScope _ [Ghc.MissingModule missingMod] _))
-        )
+    Ghc.GhcTcRnMessage (Ghc.NotInScopeErr _ [Ghc.MissingModule missingMod] _)
       | let modTxt = moduleNameToText missingMod
       , Just qualMods <- M.lookup modTxt (unMonoidMap $ qualModules autoImportCfg)
       -> MissingModule <$> qualMods
-    Ghc.GhcTcRnMessage
-        (Ghc.TcRnMessageWithInfo _
-          (Ghc.TcRnMessageDetailed _
-            (Ghc.TcRnNotInScope Ghc.NotInScope rdrName [] hints))
-        )
+    Ghc.GhcTcRnMessage (Ghc.NotInScopeErr rdrName [] hints)
       | Just unqualId <- M.lookup (T.pack $ EP.rdrName2String rdrName) (unqualIdentifiers autoImportCfg)
       , let isDataKindExtHint = \case
               Ghc.SuggestExtension (Ghc.SuggestSingleExtension _ LangExt.DataKinds) -> True
@@ -287,6 +279,11 @@ mkIEWrappedName isFirst i =
     ieCon = case idNamespace i of
               Just PatternNS -> Ghc.IEPattern Ghc.epTokD0 . Ghc.L (Ghc.nameAnn (idIsOp i) True)
               Just TypeNS -> Ghc.IEType Ghc.epTokD0 . Ghc.L (Ghc.nameAnn (idIsOp i) True)
+#if MIN_VERSION_ghc(9,14,0)
+              Just DataNS -> Ghc.IEData Ghc.epTokD0 . Ghc.L (Ghc.nameAnn (idIsOp i) True)
+#elif MIN_VERSION_ghc(9,8,0)
+              Just DataNS -> Ghc.IEName Ghc.noExtField . Ghc.L (Ghc.nameAnn (idIsOp i) False)
+#endif
               Nothing -> Ghc.IEName Ghc.noExtField . Ghc.L (Ghc.nameAnn (idIsOp i) False)
 
 addCommas :: [Ghc.GenLocated Ghc.SrcSpanAnnA e] -> [Ghc.GenLocated Ghc.SrcSpanAnnA e]

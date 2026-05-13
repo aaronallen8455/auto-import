@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               auto-import
-version:            0.1.0.0
+version:            0.1.1.0
 synopsis:           Automatically add import statements
 description:        Automatically add import statements based on configuration
 license:            BSD-3-Clause
@@ -12,7 +12,7 @@ category:           Development
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
                     README.md
-tested-with: GHC == 9.12.1, GHC == 9.10.1, GHC == 9.8.1, GHC == 9.6.1
+tested-with: GHC == 9.14.1, GHC == 9.12.1, GHC == 9.10.1, GHC == 9.8.1
 
 source-repository head
   type: git
@@ -29,7 +29,7 @@ library
     -- other-modules:
     default-extensions: LambdaCase, OverloadedStrings
     build-depends:    base < 5,
-                      ghc >= 9.6 && < 9.13,
+                      ghc >= 9.8 && < 9.15,
                       ghc-boot,
                       ghc-exactprint,
                       ghc-paths,
@@ -57,3 +57,12 @@ test-suite auto-import-test
         process,
         tasty,
         tasty-hunit
+
+-- executable play
+--   hs-source-dirs: play
+--   build-depends:
+--     base,
+--     auto-import
+--   main-is: Main.hs
+--   default-language: GHC2021
+--   ghc-options: -fplugin AutoImport

@@ -79,6 +79,7 @@ data UnqualIdentifier = UnqualIdentifier
 data Namespace
   = PatternNS
   | TypeNS
+  | DataNS
   deriving (Show, Eq, Ord)
 
 data IdInfo = IdInfo
@@ -206,7 +207,7 @@ parseUnqualIds moName = concat <$>
 parseIdentifier :: T.Text -> Parse.Parsec Void T.Text [UnqualIdentifier]
 parseIdentifier moName = do
   mNamespace <- Parse.try . Parse.optional $
-    (patternP <|> typeP) <* Parse.hspace1
+    (patternP <|> typeP <|> dataP) <* Parse.hspace1
   (parent, parentIsOp) <- identP <|> operatorP
   let parentId =
         UnqualIdentifier
@@ -247,6 +248,7 @@ parseIdentifier moName = do
                      (Parse.char ',' <* hspaceOrIndent)
     patternP = PatternNS <$ Parse.string "pattern"
     typeP = TypeNS <$ Parse.string "type"
+    dataP = DataNS <$ Parse.string "data"
 
 parseLineComment :: Parse.Parsec Void T.Text ()
 parseLineComment = do

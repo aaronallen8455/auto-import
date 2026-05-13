@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 module AutoImport.GhcFacade
   ( module Ghc
   , ann'
@@ -16,9 +17,13 @@ module AutoImport.GhcFacade
   , pattern IEVar'
   , pattern TcRnSolverReport'
   , pattern IEThingAbs'
+  , pattern NotInScopeErr
   ) where
 
 import           GHC as Ghc
+#if MIN_VERSION_ghc(9,14,0)
+                            hiding (HoleError)
+#endif
 import           GHC.Data.Bag as Ghc
 import           GHC.Data.FastString as Ghc
 import           GHC.Driver.Env as Ghc
@@ -42,17 +47,17 @@ import           GHC.Utils.Outputable as Ghc
 import           GHC.Utils.Misc as Ghc
 #if MIN_VERSION_ghc(9,8,0)
 import           GHC.Driver.DynFlags as Ghc
-#else
-import           GHC.Driver.Flags as Ghc
-import           GHC.Driver.Session as Ghc
 #endif
 
+#if MIN_VERSION_ghc(9,14,0)
+import qualified Data.List.NonEmpty as NE
+#endif
 import qualified Language.Haskell.GHC.ExactPrint as EP
 
 #if MIN_VERSION_ghc(9,10,0)
 ann' :: Ghc.EpAnn ann -> Ghc.EpAnn ann
 ann' = id
-#else
+#elif MIN_VERSION_ghc(9,8,0)
 ann' :: Ghc.SrcSpanAnnA -> Ghc.EpAnn Ghc.AnnListItem
 ann' = Ghc.ann
 #endif
@@ -61,7 +66,7 @@ noAnnSrcSpanDP'
 #if MIN_VERSION_ghc(9,10,0)
   :: Ghc.NoAnn ann
   => Ghc.DeltaPos -> Ghc.EpAnn ann
-#else
+#elif MIN_VERSION_ghc(9,8,0)
   :: Monoid ann
   => Ghc.DeltaPos -> Ghc.SrcSpanAnn' (Ghc.EpAnn ann)
 #endif
@@ -76,7 +81,7 @@ nameParensAdornment :: Ghc.NameAdornment
 nameParensAdornment =
 #if MIN_VERSION_ghc(9,12,0)
   Ghc.NameParens (Ghc.EpTok EP.d0) (Ghc.EpTok EP.d0)
-#else
+#elif MIN_VERSION_ghc(9,8,0)
   Ghc.NameParens
 #endif
 
@@ -92,17 +97,13 @@ ieThingWithAnn =
       [Ghc.AddEpAnn Ghc.AnnOpenP EP.d0, Ghc.AddEpAnn Ghc.AnnCloseP EP.d0]
       Ghc.emptyComments
   )
-#else
-  Ghc.EpAnn (Ghc.Anchor Ghc.placeholderRealSpan EP.m0)
-    [Ghc.AddEpAnn Ghc.AnnOpenP EP.d0, Ghc.AddEpAnn Ghc.AnnCloseP EP.d0]
-    Ghc.emptyComments
 #endif
 
 #if MIN_VERSION_ghc(9,12,0)
 importListAnn :: Ghc.EpAnn (Ghc.AnnList (Ghc.EpToken "hiding", [Ghc.EpToken ","]))
 #elif MIN_VERSION_ghc(9,10,0)
 importListAnn :: Ghc.EpAnn Ghc.AnnList
-#else
+#elif MIN_VERSION_ghc(9,8,0)
 importListAnn :: Ghc.SrcSpanAnn' (Ghc.EpAnn Ghc.AnnList)
 #endif
 importListAnn =
@@ -120,7 +121,7 @@ importListAnn =
       , Ghc.al_close = Just $ Ghc.AddEpAnn Ghc.AnnCloseP EP.d0
       }
     }
-#else
+#elif MIN_VERSION_ghc(9,8,0)
   (noAnnSrcSpanDP' @Ghc.AnnList $ Ghc.SameLine 0)
     { Ghc.ann = Ghc.EpAnn
       { Ghc.anns = mempty
@@ -138,7 +139,7 @@ nameAnn
   -> Bool
 #if MIN_VERSION_ghc(9,10,0)
   -> Ghc.EpAnn Ghc.NameAnn
-#else
+#elif MIN_VERSION_ghc(9,8,0)
   -> Ghc.SrcSpanAnn' (Ghc.EpAnn Ghc.NameAnn)
 #endif
 nameAnn needsParens addLeftSpace =
@@ -164,7 +165,7 @@ nameAnn needsParens addLeftSpace =
       else Ghc.noAnn
     , Ghc.entry = if addLeftSpace then EP.d1 else EP.d0
     }
-#else
+#elif MIN_VERSION_ghc(9,8,0)
   Ghc.SrcSpanAnn
     { Ghc.ann = Ghc.EpAnn
       { Ghc.anns = if needsParens
@@ -192,7 +193,7 @@ importEpAnn = (Ghc.noAnn :: Ghc.EpAnn Ghc.EpAnnImportDecl)
   }
 #elif MIN_VERSION_ghc(9,10,0)
 importEpAnn = Ghc.noAnn
-#else
+#elif MIN_VERSION_ghc(9,8,0)
 importEpAnn =
   Ghc.EpAnn
     { Ghc.entry = Ghc.Anchor Ghc.placeholderRealSpan EP.m0
@@ -211,7 +212,7 @@ importEpAnn =
 #if MIN_VERSION_ghc(9,12,0)
 epTokD0 :: Ghc.EpToken tok
 epTokD0 = Ghc.EpTok EP.d0
-#else
+#elif MIN_VERSION_ghc(9,8,0)
 epTokD0 :: Ghc.EpaLocation
 epTokD0 = EP.d0
 #endif
@@ -220,7 +221,7 @@ hasTrailingComma :: SrcSpanAnnA -> Bool
 #if MIN_VERSION_ghc(9,10,0)
 hasTrailingComma = any (\case Ghc.AddCommaAnn{} -> True; _ -> False)
   . Ghc.lann_trailing . Ghc.anns
-#else
+#elif MIN_VERSION_ghc(9,8,0)
 hasTrailingComma x  =
   case Ghc.ann x of
     Ghc.EpAnnNotUsed -> False
@@ -231,14 +232,14 @@ hasTrailingComma x  =
 pattern IEThingWith' :: XIEThingWith Ghc.GhcPs -> LIEWrappedName Ghc.GhcPs -> IEWildcard -> [LIEWrappedName Ghc.GhcPs] -> Ghc.IE Ghc.GhcPs
 #if MIN_VERSION_ghc(9,10,0)
 pattern IEThingWith' x name wc children = Ghc.IEThingWith x name wc children Nothing
-#else
+#elif MIN_VERSION_ghc(9,8,0)
 pattern IEThingWith' x name wc children = Ghc.IEThingWith x name wc children
 #endif
 
 pattern IEThingAbs' :: LIEWrappedName Ghc.GhcPs -> Ghc.IE Ghc.GhcPs
 #if MIN_VERSION_ghc(9,10,0)
 pattern IEThingAbs' name <- Ghc.IEThingAbs _ name _
-#else
+#elif MIN_VERSION_ghc(9,8,0)
 pattern IEThingAbs' name <- Ghc.IEThingAbs _ name
 #endif
 
@@ -247,13 +248,41 @@ pattern IEVar' :: LIEWrappedName Ghc.GhcPs -> Ghc.IE Ghc.GhcPs
 pattern IEVar' name = Ghc.IEVar Nothing name Nothing
 #elif MIN_VERSION_ghc(9,8,0)
 pattern IEVar' name = Ghc.IEVar Nothing name
-#else
-pattern IEVar' name = Ghc.IEVar Ghc.NoExtField name
 #endif
 
 pattern TcRnSolverReport' :: Ghc.SolverReportWithCtxt -> Ghc.TcRnMessage
 #if MIN_VERSION_ghc(9,10,0)
 pattern TcRnSolverReport' report <- Ghc.TcRnSolverReport report _
-#else
+#elif MIN_VERSION_ghc(9,8,0)
 pattern TcRnSolverReport' report <- Ghc.TcRnSolverReport report _ _
+#endif
+
+#if MIN_VERSION_ghc(9,14,0)
+extractImportErrs :: Maybe (a, [Ghc.SupplementaryInfo]) -> [Ghc.ImportError]
+extractImportErrs = foldMap (foldMap getImp . snd)
+  where
+  getImp (Ghc.SupplementaryImportErrors imps) = NE.toList imps
+  getImp _ = []
+#endif
+
+pattern NotInScopeErr :: Ghc.RdrName -> [Ghc.ImportError] -> [Ghc.GhcHint] -> TcRnMessage
+pattern NotInScopeErr rdrName impErrs hints <-
+#if MIN_VERSION_ghc(9,14,0)
+  Ghc.TcRnMessageWithInfo _
+    (Ghc.TcRnMessageDetailed _
+      (Ghc.TcRnMessageWithInfo _
+        (Ghc.TcRnMessageDetailed
+          (Ghc.ErrInfo
+            _
+            (extractImportErrs -> impErrs)
+            hints
+          )
+          (Ghc.TcRnNotInScope Ghc.NotInScope rdrName)
+        )
+      )
+    )
+#elif MIN_VERSION_ghc(9,8,0)
+  Ghc.TcRnMessageWithInfo _
+    (Ghc.TcRnMessageDetailed _
+      (Ghc.TcRnNotInScope Ghc.NotInScope rdrName impErrs hints))
 #endif
